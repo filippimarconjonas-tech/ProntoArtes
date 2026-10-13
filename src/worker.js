@@ -374,7 +374,8 @@ async function handleAdminApi(request, env, url) {
   }
   if (path === "/whatsapp/connect" && method === "POST") {
     const r = await connectWhatsApp(env, url.origin);
-    return json({ ok: true, ...r, status: await whatsappStatus(env, url.origin) });
+    console.log("whatsapp_connect", JSON.stringify(r));
+    return json({ ok: true, conectado: r.ok, steps: r.steps, status: await whatsappStatus(env, url.origin) });
   }
 
   if (path === "/leads" && method === "GET") {

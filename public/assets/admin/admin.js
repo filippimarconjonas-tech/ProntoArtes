@@ -354,7 +354,7 @@
           msg.style.color = "var(--soft)";
           msg.textContent = "Conectando com a Meta…";
           return api("/whatsapp/connect", { method: "POST", body: {} }).then(function (r) {
-            toast(r.ok ? "WhatsApp conectado!" : "A conexão não terminou — veja os detalhes", !r.ok);
+            toast(r.conectado ? "WhatsApp conectado!" : "A conexão não terminou — veja os detalhes abaixo", !r.conectado);
             renderWhatsApp(r);
             updateWaDot();
           });

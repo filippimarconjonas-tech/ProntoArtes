@@ -14,12 +14,13 @@ import { normalizePhone, stageLabel, PIPELINES } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
 
 const GRAPH = "https://graph.facebook.com/v23.0";
-const KEYS = ["whatsapp_app_id", "whatsapp_phone_number_id", "whatsapp_waba_id", "whatsapp_app_secret", "whatsapp_access_token", "whatsapp_verify_token", "whatsapp_connected_at", "whatsapp_display_phone", "whatsapp_verified_name"];
+const KEYS = ["whatsapp_config_id", "whatsapp_app_id", "whatsapp_phone_number_id", "whatsapp_waba_id", "whatsapp_app_secret", "whatsapp_access_token", "whatsapp_verify_token", "whatsapp_connected_at", "whatsapp_display_phone", "whatsapp_verified_name"];
 
 async function waConfig(env) {
   const s = await getSettings(env, KEYS);
   return {
     appId: s.whatsapp_app_id || "",
+    configId: s.whatsapp_config_id || "",
     phoneNumberId: s.whatsapp_phone_number_id || "",
     wabaId: s.whatsapp_waba_id || "",
     appSecret: env.WHATSAPP_APP_SECRET || s.whatsapp_app_secret || "",
@@ -205,6 +206,7 @@ export async function whatsappStatus(env, origin) {
   ).first();
   return {
     app_id: cfg.appId,
+    config_id: cfg.configId,
     phone_number_id: cfg.phoneNumberId,
     waba_id: cfg.wabaId,
     tem_app_secret: !!cfg.appSecret,
@@ -222,6 +224,7 @@ export async function whatsappStatus(env, origin) {
 export async function saveWhatsAppSettings(env, body) {
   const vals = {};
   const id = (v) => String(v || "").replace(/\D/g, "");
+  if (body.config_id !== undefined) vals.whatsapp_config_id = id(body.config_id) || null;
   if (body.app_id !== undefined) vals.whatsapp_app_id = id(body.app_id) || null;
   if (body.phone_number_id !== undefined) vals.whatsapp_phone_number_id = id(body.phone_number_id) || null;
   if (body.waba_id !== undefined) vals.whatsapp_waba_id = id(body.waba_id) || null;
@@ -353,4 +356,71 @@ export async function connectWhatsApp(env, origin) {
     steps.push({ label: "Segurança", ok: true, detail: "Token de acesso apagado do banco (não é necessário para receber mensagens)." });
   }
   return { ok, steps };
+}
+
+/**
+ * Conclui o Embedded Signup em modo coexistência (número que continua no WhatsApp Business App).
+ * Recebe do painel o "code" do Login do Facebook e os IDs devolvidos pelo fluxo da Meta.
+ */
+export async function completeEmbeddedSignup(env, origin, body) {
+  const cfg = await waConfig(env);
+  const steps = [];
+  const step = async (label, fn) => {
+    try { steps.push({ label, ok: true, detail: (await fn()) || "" }); return true; }
+    catch (err) { steps.push({ label, ok: false, detail: err.message }); return false; }
+  };
+  const phoneId = String(body.phone_number_id || "").replace(/\D/g, "");
+  const wabaId = String(body.waba_id || "").replace(/\D/g, "");
+  const code = String(body.code || "");
+  if (!cfg.appId || !cfg.appSecret) return { ok: false, steps: [{ label: "Credenciais", ok: false, detail: "Informe o App ID e a chave secreta do aplicativo." }] };
+  if (!code || !phoneId || !wabaId) return { ok: false, steps: [{ label: "Retorno da Meta", ok: false, detail: "O fluxo da Meta não devolveu o código ou os IDs do número. Tente novamente." }] };
+
+  let token = null;
+  if (!await step("Gerar acesso da empresa", async () => {
+    const r = await graph(`/oauth/access_token?client_id=${cfg.appId}&client_secret=${encodeURIComponent(cfg.appSecret)}&code=${encodeURIComponent(code)}`);
+    token = r.access_token;
+    if (!token) throw new Error("A Meta não devolveu o token.");
+    return "Token da empresa gerado";
+  })) return { ok: false, steps };
+
+  let display = null, name = null;
+  await step("Conferir o número", async () => {
+    const n = await graph(`/${phoneId}?fields=display_phone_number,verified_name,is_on_biz_app,platform_type`, { token });
+    display = n.display_phone_number || null;
+    name = n.verified_name || null;
+    return `${display || phoneId} · ${name || ""}` + (n.is_on_biz_app ? " · coexistência com o WhatsApp Business App ativa" : "");
+  });
+
+  const subOk = await step("Assinar a conta do WhatsApp Business no app", async () => {
+    await graph(`/${wabaId}/subscribed_apps`, { method: "POST", token });
+    return "Conta " + wabaId + " assinada";
+  });
+
+  await step("Conferir o webhook do aplicativo", async () => {
+    await graph(`/${cfg.appId}/subscriptions`, {
+      method: "POST",
+      form: {
+        object: "whatsapp_business_account",
+        callback_url: origin + "/api/whatsapp/webhook",
+        verify_token: cfg.verifyToken,
+        fields: "messages,smb_message_echoes",
+        include_values: "true",
+        access_token: `${cfg.appId}|${cfg.appSecret}`
+      }
+    });
+    return "messages, smb_message_echoes";
+  });
+
+  if (subOk) {
+    await setSettings(env, {
+      whatsapp_phone_number_id: phoneId,
+      whatsapp_waba_id: wabaId,
+      whatsapp_display_phone: display,
+      whatsapp_verified_name: name,
+      whatsapp_business_token: token,
+      whatsapp_connected_at: new Date().toISOString()
+    });
+    steps.push({ label: "Pronto", ok: true, detail: "Número da loja conectado. Mensagens novas passam a entrar no CRM." });
+  }
+  return { ok: subOk, steps };
 }

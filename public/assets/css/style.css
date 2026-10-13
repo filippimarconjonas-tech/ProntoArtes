@@ -368,6 +368,7 @@ body.modal-open { overflow: hidden; }
 .footer__social { display: flex; justify-content: center; gap: 22px; margin-bottom: 18px; }
 .footer__social a { color: var(--gold-light); text-decoration: none; font-weight: 600; }
 .footer__legal { margin: 0; line-height: 1.8; }
+.footer__legal a { color: var(--gold-light); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

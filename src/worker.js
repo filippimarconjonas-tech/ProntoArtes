@@ -14,7 +14,7 @@ import {
   hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
-import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp } from "./whatsapp.js";
+import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
 
 const FORM_FIELDS = ["nome", "whatsapp", "cidade", "email", "produto", "interesse", "espaco", "prazo", "mensagem"];
 const TRACK_FIELDS = ["origem", "pagina", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "referrer"];
@@ -376,6 +376,11 @@ async function handleAdminApi(request, env, url) {
       throw err;
     }
     return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
+  }
+  if (path === "/whatsapp/embedded" && method === "POST") {
+    const r = await completeEmbeddedSignup(env, url.origin, (await readJson(request)) || {});
+    console.log("whatsapp_embedded", JSON.stringify(r));
+    return json({ ok: true, conectado: r.ok, steps: r.steps, status: await whatsappStatus(env, url.origin) });
   }
   if (path === "/whatsapp/connect" && method === "POST") {
     const r = await connectWhatsApp(env, url.origin);

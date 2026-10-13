@@ -35,7 +35,16 @@ produto escolhido, kit, e-mail, descrição do projeto e reenvios. A faixa pode 
 
 "Venda fechada" exige o canal (site Tray ou WhatsApp da loja) e aceita valor e nº do pedido Tray; "Perdido" exige o motivo.
 Um lead que envia o formulário de novo é atualizado (não duplica) e, se estava em nutrição ou perdido, volta para o funil de vendas.
-Leads que chamam direto no WhatsApp podem ser cadastrados em "+ Novo lead" até a integração automática.
+Leads que chamam direto no WhatsApp entram sozinhos pela integração abaixo (ou em "+ Novo lead").
+
+## WhatsApp (Cloud API em coexistência)
+- Webhook: `/api/whatsapp/webhook` (campos `messages` e `smb_message_echoes`), assinatura validada com a chave secreta do app.
+- Credenciais são cadastradas em `/admin` › WhatsApp e ficam na tabela `settings` do D1 (nunca no repositório).
+- "Salvar e conectar" cadastra o webhook e assina a conta; "Conectar número da loja" roda o Cadastro incorporado
+  da Meta em modo coexistência (exige app aprovado como Provedor de Tecnologia e um Configuration ID do Login do Facebook para Empresas).
+
+## Páginas legais
+`/privacidade` e `/exclusao-de-dados` — usar nos campos de URL do app na Meta.
 
 Novas migrações: `npx wrangler d1 migrations apply prontoartes-crm --remote`.
 

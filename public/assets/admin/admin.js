@@ -324,6 +324,16 @@
         '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Cada conversa nova no WhatsApp da loja vira lead em <strong>Funil de vendas › Novo lead</strong>. ' +
         "Quando a equipe responde pelo app, o lead passa para <strong>Em atendimento</strong>. Mensagens de quem já é lead entram no histórico.</p></div>" +
 
+        '<div class="panel"><h3>Número da loja (coexistência)</h3>' +
+          '<p class="muted" style="font-size:12.5px;margin:0 0 12px">Conecta o (24) 98837-0399 à API <strong>sem tirar o número do WhatsApp Business App</strong>. ' +
+          "Exige o app aprovado como Provedor de Tecnologia e uma configuração de “Login do Facebook para Empresas” do tipo Cadastro incorporado do WhatsApp.</p>" +
+          '<form id="es-form">' +
+            '<label class="fld"><span>Configuration ID (Login do Facebook para Empresas)</span><input name="config_id" inputmode="numeric" value="' + esc(st.config_id || "") + '" placeholder="Ex.: 1234567890123456"></label>' +
+            '<div class="modal__actions" style="justify-content:flex-start"><button type="button" class="btn btn--ghost" id="es-save">Salvar</button>' +
+            '<button type="button" class="btn btn--wa" id="es-start"' + (!st.app_id || !st.config_id ? " disabled" : "") + ">Conectar número da loja</button></div>" +
+            '<p class="form-msg" id="es-msg">' + (!st.app_id ? "Preencha o App ID em Credenciais da Meta." : !st.config_id ? "Preencha o Configuration ID para liberar o botão." : "") + "</p>" +
+          "</form></div>" +
+
         '<div class="panel"><h3>Credenciais da Meta</h3><form id="wa-form">' +
           '<label class="fld"><span>App ID (Meta for Developers › seu app › topo da página)</span><input name="app_id" inputmode="numeric" value="' + esc(st.app_id || "") + '" placeholder="Opcional se o token funcionar"></label>' +
           '<label class="fld"><span>Phone Number ID</span><input name="phone_number_id" value="' + esc(st.phone_number_id || WA_DEFAULTS.phone_number_id) + '"></label>' +
@@ -343,6 +353,7 @@
         }).join("") + "</ul></div>" : "") +
         "</div>";
 
+      bindEmbeddedSignup(st);
       var form = $("#wa-form");
       $$("input[readonly]", form).forEach(function (i) { i.addEventListener("focus", function () { i.removeAttribute("readonly"); }); });
       var clicked = "salvar";
@@ -379,6 +390,73 @@
         });
       });
     }).catch(fail);
+  }
+
+  /* Embedded Signup (Meta) em modo coexistência com o WhatsApp Business App */
+  function loadFbSdk(appId) {
+    return new Promise(function (resolve, reject) {
+      if (window.FB) return resolve(window.FB);
+      window.fbAsyncInit = function () {
+        window.FB.init({ appId: appId, autoLogAppEvents: true, xfbml: false, version: "v23.0" });
+        resolve(window.FB);
+      };
+      var sc = document.createElement("script");
+      sc.src = "https://connect.facebook.net/pt_BR/sdk.js";
+      sc.async = true; sc.defer = true; sc.crossOrigin = "anonymous";
+      sc.onerror = function () { reject(new Error("Não foi possível carregar o SDK da Meta (bloqueador de anúncios?).")); };
+      document.body.appendChild(sc);
+    });
+  }
+
+  function bindEmbeddedSignup(st) {
+    var msg = $("#es-msg");
+    $("#es-save").addEventListener("click", function () {
+      api("/whatsapp", { method: "POST", body: { config_id: $("#es-form").config_id.value } })
+        .then(function () { toast("Configuration ID salvo"); renderWhatsApp(); }).catch(fail);
+    });
+    $("#es-start").addEventListener("click", function () {
+      var btn = this;
+      btn.disabled = true;
+      msg.style.color = "var(--soft)";
+      msg.textContent = "Abrindo o cadastro da Meta…";
+      var session = null;
+      function onMessage(ev) {
+        if (!/(^|\.)facebook\.com$/.test(new URL(ev.origin).hostname)) return;
+        try {
+          var d = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
+          if (d && d.type === "WA_EMBEDDED_SIGNUP") {
+            if (/^FINISH/.test(d.event || "")) session = d.data || {};
+            else if (d.event === "CANCEL") msg.textContent = "Cadastro cancelado" + (d.data && d.data.current_step ? " na etapa " + d.data.current_step : "") + ".";
+            else if (d.event === "ERROR") msg.textContent = "A Meta informou um erro: " + ((d.data && d.data.error_message) || "desconhecido");
+          }
+        } catch (e) { /* mensagens de outros scripts */ }
+      }
+      window.addEventListener("message", onMessage);
+
+      loadFbSdk(st.app_id).then(function (FB) {
+        FB.login(function (resp) {
+          var code = resp && resp.authResponse && resp.authResponse.code;
+          if (!code) { window.removeEventListener("message", onMessage); btn.disabled = false; if (!msg.textContent || /Abrindo/.test(msg.textContent)) msg.textContent = "Cadastro não concluído."; return; }
+          var tries = 0;
+          (function waitSession() {
+            if (!session && tries++ < 20) return setTimeout(waitSession, 250);
+            window.removeEventListener("message", onMessage);
+            if (!session || !session.phone_number_id) { msg.textContent = "A Meta não devolveu o número selecionado. Tente de novo."; btn.disabled = false; return; }
+            msg.textContent = "Finalizando a conexão…";
+            api("/whatsapp/embedded", { method: "POST", body: { code: code, phone_number_id: session.phone_number_id, waba_id: session.waba_id } })
+              .then(function (r) {
+                toast(r.conectado ? "Número da loja conectado!" : "A conexão não terminou — veja os detalhes", !r.conectado);
+                renderWhatsApp(r); updateWaDot();
+              }).catch(function (e) { fail(e); btn.disabled = false; });
+          })();
+        }, {
+          config_id: st.config_id,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" }
+        });
+      }).catch(function (e) { msg.textContent = e.message; btn.disabled = false; window.removeEventListener("message", onMessage); });
+    });
   }
 
   function updateWaDot() {

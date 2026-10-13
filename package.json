@@ -1,0 +1,13 @@
+{
+  "name": "prontoartes-landing",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo \"Site estático em ./public — nada para compilar\"",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.150.0"
+  }
+}

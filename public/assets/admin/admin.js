@@ -73,12 +73,12 @@
     return fetch("/api/admin" + path, init).then(function (r) {
       if (r.status === 401) { location.reload(); throw new Error("401"); }
       return r.json().then(function (d) {
-        if (!d.ok) { var e = new Error(d.error || "erro"); e.code = d.error; throw e; }
+        if (!d.ok) { var e = new Error(d.error || "erro"); e.code = d.error; e.serverMessage = d.message; throw e; }
         return d;
       });
     });
   }
-  function fail(e) { if (e.message !== "401") toast(ERR[e.code] || "Algo deu errado: " + (e.code || e.message), true); }
+  function fail(e) { if (e.message !== "401") toast(ERR[e.code] || e.serverMessage || "Algo deu errado: " + (e.code || e.message), true); }
 
   /* ---------------- dados ---------------- */
   function stageInfo(pipeline, stage) {
@@ -118,7 +118,7 @@
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1);
@@ -135,6 +135,7 @@
     if (v === "vendas" || v === "nutricao") return renderBoard(v);
     if (v === "posvenda") return renderPostSale();
     if (v === "whatsapp") return renderWhatsApp();
+    if (v === "modelos") return renderTemplates();
     return renderList();
   }
 
@@ -320,6 +321,7 @@
           row("Último webhook", st.ultimo_webhook ? fmtDate(st.ultimo_webhook, true) + " (há " + ago(st.ultimo_webhook) + ")" : "nenhum ainda") +
           row("Mensagens recebidas", num(st.recebidas)) +
           row("Respostas da loja", num(st.enviadas)) +
+          row("Envio pelo CRM", st.tem_token_envio ? "✅ ativo" : "⏳ cadastre o token permanente") +
         "</dl>" +
         '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Cada conversa nova no WhatsApp da loja vira lead em <strong>Funil de vendas › Novo lead</strong>. ' +
         "Quando a equipe responde pelo app, o lead passa para <strong>Em atendimento</strong>. Mensagens de quem já é lead entram no histórico.</p></div>" +
@@ -340,6 +342,7 @@
           '<label class="fld"><span>ID da conta do WhatsApp Business</span><input name="waba_id" value="' + esc(st.waba_id || WA_DEFAULTS.waba_id) + '"></label>' +
           '<label class="fld"><span>Chave secreta do aplicativo ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
           '<label class="fld"><span>Token de acesso ' + (st.tem_access_token ? "(salvo ✓)" : "(usado só para conectar; é apagado depois)") + '</span><input name="access_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_access_token ? "••••••••" : "Cole o token EAAB…") + '"></label>' +
+          '<label class="fld"><span>Token permanente — Usuário do sistema ' + (st.tem_token_envio ? "(salvo ✓)" : "(para enviar mensagens e criar modelos)") + '</span><input name="system_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_token_envio ? "••••••••" : "Cole o token EAAB… do Usuário do sistema") + '"></label>' +
           '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost" name="acao" value="salvar">Salvar</button><button class="btn btn--wa" name="acao" value="conectar">Salvar e conectar</button></div>' +
           '<p class="form-msg"></p>' +
         "</form></div>" +
@@ -364,6 +367,12 @@
         msg.textContent = "";
         $$("button", form).forEach(function (b) { b.disabled = true; });
         var secret = form.app_secret.value.trim(), token = form.access_token.value.trim();
+        var sysToken = form.system_token.value.trim();
+        if (sysToken && !/^EA[A-Za-z0-9]{50,}$/.test(sysToken)) {
+          msg.textContent = "O token permanente começa com “EA” e é bem longo.";
+          $$("button", form).forEach(function (b) { b.disabled = false; });
+          return;
+        }
         if (secret && !/^[0-9a-f]{32}$/i.test(secret)) {
           msg.textContent = "A chave secreta do aplicativo tem 32 letras/números (0-9, a-f). Confira se o navegador não preencheu o campo sozinho.";
           $$("button", form).forEach(function (b) { b.disabled = false; });
@@ -374,7 +383,7 @@
           $$("button", form).forEach(function (b) { b.disabled = false; });
           return;
         }
-        var body = { app_id: form.app_id.value, phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: secret, access_token: token };
+        var body = { app_id: form.app_id.value, phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: secret, access_token: token, system_token: sysToken };
         api("/whatsapp", { method: "POST", body: body }).then(function () {
           if (clicked !== "conectar") { toast("Credenciais salvas"); renderWhatsApp(); return; }
           msg.style.color = "var(--soft)";
@@ -461,6 +470,152 @@
 
   function updateWaDot() {
     api("/whatsapp").then(function (st) { var d = $("#wa-dot"); if (d) d.textContent = st.conectado_em ? "" : "!"; }).catch(function () {});
+  }
+
+  /* ---------------- modelos de mensagem ---------------- */
+  var TPL_CACHE = null;
+  var TPL_SUGESTOES = [
+    { name: "followup_orcamento", category: "MARKETING", body: "Olá, {{1}}! Aqui é da Pronto Artes. Conseguiu avaliar o orçamento do {{2}} que enviamos? Se quiser, ajustamos frete e forma de pagamento para você.", examples: ["Ana", "Chafariz 3 Quedas"], footer: "Pronto Artes · Arte que decora" },
+    { name: "boas_vindas_lead", category: "MARKETING", body: "Olá, {{1}}! Recebemos seu contato pelo site da Pronto Artes. Para te ajudar com o orçamento, pode me dizer as medidas do espaço e a cidade de entrega?", examples: ["Ana"], footer: "Pronto Artes · Arte que decora" },
+    { name: "pedido_enviado", category: "UTILITY", body: "Olá, {{1}}! Seu pedido {{2}} da Pronto Artes foi enviado. Código de rastreio: {{3}}.", examples: ["Ana", "12345", "BR123456789"], footer: "" }
+  ];
+  var STATUS_TPL = { APPROVED: "✅ Aprovado", PENDING: "⏳ Em análise", REJECTED: "❌ Rejeitado", PAUSED: "⏸ Pausado", DISABLED: "⛔ Desativado" };
+
+  function loadTemplates(force) {
+    if (TPL_CACHE && !force) return Promise.resolve(TPL_CACHE);
+    return api("/whatsapp/templates").then(function (d) { TPL_CACHE = d.templates; return TPL_CACHE; });
+  }
+
+  function renderTemplates() {
+    var view = $("#view");
+    view.innerHTML = '<p class="empty">Carregando modelos…</p>';
+    loadTemplates(true).then(function (list) {
+      view.innerHTML = '<div class="panels" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)">' +
+        '<div class="panel"><h3>Modelos da conta (' + list.length + ")</h3>" +
+          (list.length ? '<div class="table-wrap" style="box-shadow:none"><table><thead><tr><th>Nome</th><th>Status</th><th>Categoria</th><th>Texto</th><th></th></tr></thead><tbody>' +
+            list.map(function (t) {
+              return "<tr><td>" + esc(t.name) + "<br><small class=\"muted\">" + esc(t.language) + "</small></td><td>" + esc(STATUS_TPL[t.status] || t.status) +
+                (t.rejected_reason ? "<br><small class=\"muted\">" + esc(t.rejected_reason) + "</small>" : "") + "</td><td>" + esc(t.category) +
+                '</td><td class="trunc" style="white-space:normal;max-width:320px">' + esc(t.body) + '</td><td><button class="btn btn--danger btn--sm" data-del-tpl="' + esc(t.name) + '">Excluir</button></td></tr>';
+            }).join("") + "</tbody></table></div>" : '<p class="empty">Nenhum modelo ainda.</p>') +
+          '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Modelos são exigidos pelo WhatsApp para iniciar conversa ou responder depois de 24h sem mensagem do cliente. A Meta analisa cada modelo (geralmente em minutos).</p>' +
+        "</div>" +
+        '<div class="panel"><h3>Criar modelo</h3>' +
+          '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Sugestões: ' + TPL_SUGESTOES.map(function (t, i) { return '<button type="button" class="btn btn--ghost btn--sm" data-sug="' + i + '" style="margin:2px">' + esc(t.name) + "</button>"; }).join("") + "</p>" +
+          '<form id="tpl-form">' +
+            '<div class="grid2"><label class="fld"><span>Nome (minúsculas e _)</span><input name="name" required pattern="[a-z0-9_]+" placeholder="followup_orcamento"></label>' +
+            '<label class="fld"><span>Categoria</span><select name="category"><option value="MARKETING">Marketing (ofertas, follow-up)</option><option value="UTILITY">Utilidade (pedido, entrega)</option></select></label></div>' +
+            '<label class="fld"><span>Texto — use {{1}}, {{2}}… para variáveis</span><textarea name="body" rows="5" required placeholder="Olá, {{1}}! …"></textarea></label>' +
+            '<div id="tpl-examples"></div>' +
+            '<label class="fld"><span>Rodapé (opcional)</span><input name="footer" maxlength="60" placeholder="Pronto Artes · Arte que decora"></label>' +
+            '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--primary">Enviar para aprovação da Meta</button></div>' +
+            '<p class="form-msg"></p>' +
+          "</form></div></div>";
+
+      var form = $("#tpl-form");
+      function syncExamples(values) {
+        var n = (form.body.value.match(/\{\{\d+\}\}/g) || []).length;
+        var box = $("#tpl-examples");
+        var cur = $$("input", box).map(function (i) { return i.value; });
+        box.innerHTML = Array.apply(null, Array(n)).map(function (_, i) {
+          var v = values ? values[i] : cur[i];
+          return '<label class="fld"><span>Exemplo para {{' + (i + 1) + '}}</span><input data-ex value="' + esc(v || "") + '" required></label>';
+        }).join("");
+      }
+      form.body.addEventListener("input", function () { syncExamples(); });
+      $$("[data-sug]", view).forEach(function (b) {
+        b.addEventListener("click", function () {
+          var t = TPL_SUGESTOES[+b.getAttribute("data-sug")];
+          form.name.value = t.name; form.category.value = t.category; form.body.value = t.body; form.footer.value = t.footer;
+          syncExamples(t.examples);
+        });
+      });
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var btn = $("button.btn--primary", form), msg = $(".form-msg", form);
+        btn.disabled = true; msg.textContent = "";
+        api("/whatsapp/templates", { method: "POST", body: {
+          name: form.name.value, category: form.category.value, body: form.body.value, footer: form.footer.value,
+          examples: $$("[data-ex]", form).map(function (i) { return i.value; })
+        } }).then(function (r) {
+          toast("Modelo enviado — status: " + (STATUS_TPL[r.status] || r.status));
+          renderTemplates();
+        }).catch(function (err) { btn.disabled = false; msg.textContent = err.serverMessage || ERR[err.code] || err.code; });
+      });
+      $$("[data-del-tpl]", view).forEach(function (b) {
+        b.addEventListener("click", function () {
+          var name = b.getAttribute("data-del-tpl");
+          if (!confirm("Excluir o modelo " + name + " na Meta?")) return;
+          api("/whatsapp/templates/" + encodeURIComponent(name), { method: "DELETE", body: {} })
+            .then(function () { toast("Modelo excluído"); renderTemplates(); }).catch(fail);
+        });
+      });
+    }).catch(function (err) {
+      view.innerHTML = '<div class="panel"><h3>Modelos de mensagem</h3><p class="empty">' + esc(err.serverMessage || ERR[err.code] || err.code) +
+        '</p><p><a class="btn btn--ghost btn--sm" href="#whatsapp">Ir para WhatsApp</a></p></div>';
+    });
+  }
+
+  /* Envio de WhatsApp na ficha do lead */
+  function waSendSection(l) {
+    var open = l.last_inbound_at && (Date.now() - new Date(l.last_inbound_at).getTime()) < 864e5;
+    return '<div class="d-sec"><h3>Enviar WhatsApp pelo CRM</h3>' +
+      '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (open
+        ? "✅ Janela de 24h aberta (cliente escreveu há " + ago(l.last_inbound_at) + "): pode mandar texto livre."
+        : "⏳ Fora da janela de 24h: use um modelo aprovado para iniciar a conversa.") + "</p>" +
+      (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' : "") +
+      '<form id="wa-tpl"><div class="grid2"><label class="fld"><span>Modelo</span><select name="template"><option value="">Carregando…</option></select></label><div id="wa-tpl-params"></div></div>' +
+      '<p class="muted" id="wa-tpl-preview" style="font-size:12.5px;white-space:pre-wrap"></p>' +
+      '<button class="btn btn--wa btn--sm">Enviar modelo</button> <span class="form-msg" id="wa-tpl-msg"></span></form></div>';
+  }
+
+  function bindWaSend(l) {
+    var textForm = $("#wa-text");
+    if (textForm) textForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var t = textForm.text.value.trim(); if (!t) return;
+      $("button", textForm).disabled = true;
+      api("/leads/" + l.id + "/whatsapp", { method: "POST", body: { text: t } })
+        .then(function () { toast("Mensagem enviada"); loadLeads().then(function () { render(); openLead(l.id); }); })
+        .catch(function (err) { $("button", textForm).disabled = false; fail(err); });
+    });
+
+    var f = $("#wa-tpl"), sel = f.template, params = $("#wa-tpl-params"), prev = $("#wa-tpl-preview"), msg = $("#wa-tpl-msg");
+    var list = [];
+    function refresh() {
+      var t = list.filter(function (x) { return x.name + "|" + x.language === sel.value; })[0];
+      if (!t) { params.innerHTML = ""; prev.textContent = ""; return; }
+      var defaults = [firstName(l.nome), l.produto || l.interesse || "", ""];
+      params.innerHTML = Array.apply(null, Array(t.vars)).map(function (_, i) {
+        return '<label class="fld"><span>{{' + (i + 1) + '}}</span><input data-p value="' + esc(defaults[i] || "") + '"></label>';
+      }).join("");
+      var upd = function () {
+        var vals = $$("[data-p]", params).map(function (i) { return i.value; });
+        prev.textContent = t.body.replace(/\{\{(\d+)\}\}/g, function (m, n) { return vals[n - 1] || m; });
+      };
+      $$("[data-p]", params).forEach(function (i) { i.addEventListener("input", upd); });
+      upd();
+    }
+    loadTemplates().then(function (all) {
+      list = all.filter(function (t) { return t.status === "APPROVED"; });
+      sel.innerHTML = list.length ? list.map(function (t) { return '<option value="' + esc(t.name + "|" + t.language) + '">' + esc(t.name) + " (" + esc(t.language) + ")</option>"; }).join("")
+        : '<option value="">Nenhum modelo aprovado</option>';
+      refresh();
+    }).catch(function (err) {
+      sel.innerHTML = '<option value="">Indisponível</option>';
+      msg.textContent = err.serverMessage || ERR[err.code] || "";
+    });
+    sel.addEventListener("change", refresh);
+    f.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (!sel.value) return;
+      var parts = sel.value.split("|");
+      var btn = $("button", f); btn.disabled = true; msg.textContent = "";
+      api("/leads/" + l.id + "/whatsapp", { method: "POST", body: {
+        template: parts[0], language: parts[1], params: $$("[data-p]", params).map(function (i) { return i.value; }), preview: prev.textContent
+      } }).then(function () { toast("Modelo enviado"); loadLeads().then(function () { render(); openLead(l.id); }); })
+        .catch(function (err) { btn.disabled = false; msg.textContent = err.serverMessage || ERR[err.code] || err.code; });
+    });
   }
 
   /* ---------------- lista ---------------- */
@@ -617,6 +772,8 @@
             }).join("") + "</select></label>" +
         '</div><button class="btn btn--ghost btn--sm">Salvar contato</button></form></div>' +
 
+        waSendSection(l) +
+
         '<div class="d-sec"><h3>Histórico e notas</h3>' +
           '<form class="note-form" id="note-form"><textarea name="text" placeholder="Registrar conversa, proposta enviada, objeção…" required></textarea><button class="btn btn--primary">Anotar</button></form>' +
           '<ul class="timeline">' + d.events.map(function (ev) {
@@ -651,6 +808,8 @@
         if (changingStage) { payload.pipeline = parts[0]; payload.stage = parts[1]; }
         patchLead(l.id, payload).then(function () { toast("Lead atualizado"); }).catch(function () {});
       });
+
+      bindWaSend(l);
 
       $("#contact-edit").addEventListener("submit", function (e) {
         e.preventDefault();

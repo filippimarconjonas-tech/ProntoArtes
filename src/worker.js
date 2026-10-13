@@ -14,6 +14,7 @@ import {
   hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
+import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
 
 const FORM_FIELDS = ["nome", "whatsapp", "cidade", "email", "produto", "interesse", "espaco", "prazo", "mensagem"];
@@ -377,6 +378,23 @@ async function handleAdminApi(request, env, url) {
     }
     return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
   }
+  if (path.startsWith("/whatsapp/templates") || /^\/leads\/\d+\/whatsapp$/.test(path)) {
+    try {
+      if (path === "/whatsapp/templates" && method === "GET") return json({ ok: true, templates: await listTemplates(env) });
+      if (path === "/whatsapp/templates" && method === "POST") return json({ ok: true, ...(await createTemplate(env, (await readJson(request)) || {})) });
+      const tm = path.match(/^\/whatsapp\/templates\/([a-z0-9_]+)$/);
+      if (tm && method === "DELETE") { await deleteTemplate(env, tm[1]); return json({ ok: true }); }
+      const lm = path.match(/^\/leads\/(\d+)\/whatsapp$/);
+      if (lm && method === "POST") {
+        const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(+lm[1]).first();
+        if (!lead) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, ...(await sendToLead(env, lead, (await readJson(request)) || {}, user.username, logEvent)) });
+      }
+    } catch (err) {
+      return json({ ok: false, error: err.code || "erro_meta", message: err.message }, 400);
+    }
+  }
+
   if (path === "/whatsapp/embedded" && method === "POST") {
     const r = await completeEmbeddedSignup(env, url.origin, (await readJson(request)) || {});
     console.log("whatsapp_embedded", JSON.stringify(r));

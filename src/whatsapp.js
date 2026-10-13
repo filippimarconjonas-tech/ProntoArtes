@@ -14,9 +14,9 @@ import { normalizePhone, stageLabel, PIPELINES } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
 
 const GRAPH = "https://graph.facebook.com/v23.0";
-const KEYS = ["whatsapp_config_id", "whatsapp_app_id", "whatsapp_phone_number_id", "whatsapp_waba_id", "whatsapp_app_secret", "whatsapp_access_token", "whatsapp_verify_token", "whatsapp_connected_at", "whatsapp_display_phone", "whatsapp_verified_name"];
+const KEYS = ["whatsapp_system_token", "whatsapp_business_token", "whatsapp_config_id", "whatsapp_app_id", "whatsapp_phone_number_id", "whatsapp_waba_id", "whatsapp_app_secret", "whatsapp_access_token", "whatsapp_verify_token", "whatsapp_connected_at", "whatsapp_display_phone", "whatsapp_verified_name"];
 
-async function waConfig(env) {
+export async function waConfig(env) {
   const s = await getSettings(env, KEYS);
   return {
     appId: s.whatsapp_app_id || "",
@@ -25,6 +25,8 @@ async function waConfig(env) {
     wabaId: s.whatsapp_waba_id || "",
     appSecret: env.WHATSAPP_APP_SECRET || s.whatsapp_app_secret || "",
     accessToken: s.whatsapp_access_token || "",
+    // Token para enviar mensagens e gerenciar modelos: Usuário do sistema (permanente) ou o do Cadastro incorporado
+    apiToken: env.WHATSAPP_SYSTEM_TOKEN || s.whatsapp_system_token || s.whatsapp_business_token || "",
     verifyToken: env.WHATSAPP_VERIFY_TOKEN || s.whatsapp_verify_token || "",
     connectedAt: s.whatsapp_connected_at || null,
     displayPhone: s.whatsapp_display_phone || null,
@@ -211,6 +213,7 @@ export async function whatsappStatus(env, origin) {
     waba_id: cfg.wabaId,
     tem_app_secret: !!cfg.appSecret,
     tem_access_token: !!cfg.accessToken,
+    tem_token_envio: !!cfg.apiToken,
     callback_url: origin + "/api/whatsapp/webhook",
     verify_token: cfg.verifyToken,
     conectado_em: cfg.connectedAt,
@@ -232,6 +235,9 @@ export async function saveWhatsAppSettings(env, body) {
   const token = String(body.access_token || "").trim();
   if (secret && !/^[0-9a-f]{32}$/i.test(secret)) throw Object.assign(new Error("app_secret_invalido"), { code: "app_secret_invalido" });
   if (token && !/^EA[A-Za-z0-9]{50,}$/.test(token)) throw Object.assign(new Error("token_invalido"), { code: "token_invalido" });
+  const sysToken = String(body.system_token || "").trim();
+  if (sysToken && !/^EA[A-Za-z0-9]{50,}$/.test(sysToken)) throw Object.assign(new Error("token_invalido"), { code: "token_invalido" });
+  if (sysToken) vals.whatsapp_system_token = sysToken;
   if (secret) vals.whatsapp_app_secret = secret;
   if (token) vals.whatsapp_access_token = token;
   const cur = await getSettings(env, ["whatsapp_verify_token"]);
@@ -241,13 +247,17 @@ export async function saveWhatsAppSettings(env, body) {
   await setSettings(env, vals);
 }
 
-async function graph(path, { method = "GET", token, form } = {}) {
+export async function graph(path, { method = "GET", token, form, json } = {}) {
   const url = new URL(GRAPH + path);
   const init = { method, headers: {} };
   if (token) init.headers.authorization = "Bearer " + token;
   if (form) {
     init.headers["content-type"] = "application/x-www-form-urlencoded";
     init.body = new URLSearchParams(form).toString();
+  }
+  if (json) {
+    init.headers["content-type"] = "application/json";
+    init.body = JSON.stringify(json);
   }
   const res = await fetch(url, init);
   let data = null;

@@ -14,6 +14,7 @@ import {
   hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
+import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp } from "./whatsapp.js";
 
 const FORM_FIELDS = ["nome", "whatsapp", "cidade", "email", "produto", "interesse", "espaco", "prazo", "mensagem"];
 const TRACK_FIELDS = ["origem", "pagina", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "referrer"];
@@ -366,11 +367,21 @@ async function handleAdminApi(request, env, url) {
     return json({ ok: true }, 200, { "set-cookie": cookie });
   }
 
+  if (path === "/whatsapp" && method === "GET") return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
+  if (path === "/whatsapp" && method === "POST") {
+    await saveWhatsAppSettings(env, (await readJson(request)) || {});
+    return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
+  }
+  if (path === "/whatsapp/connect" && method === "POST") {
+    const r = await connectWhatsApp(env, url.origin);
+    return json({ ok: true, ...r, status: await whatsappStatus(env, url.origin) });
+  }
+
   if (path === "/leads" && method === "GET") {
     const { results } = await env.DB.prepare(
       `SELECT id, created_at, updated_at, nome, whatsapp, cidade, produto, interesse, espaco, prazo, faixa, score, perfil,
               pipeline, stage, stage_changed_at, post_stage, next_followup_at, valor, canal_fechamento, motivo_perda,
-              origem, canal_entrada, utm_source, envios, first_contact_at
+              origem, canal_entrada, utm_source, envios, first_contact_at, last_inbound_at, last_outbound_at
          FROM leads ORDER BY created_at DESC LIMIT 2000`
     ).all();
     return json({ ok: true, leads: results });
@@ -436,6 +447,14 @@ export default {
     const p = url.pathname;
 
     if (p === "/api/lead") return handlePublicLead(request, env, ctx);
+    if (p === "/api/whatsapp/webhook") {
+      try {
+        return await handleWhatsAppWebhook(request, env, { upsertLead, logEvent });
+      } catch (err) {
+        console.error("whatsapp_error", err?.stack || err?.message);
+        return new Response("Erro", { status: 500 });
+      }
+    }
     if (p.startsWith("/api/admin/") || p === "/api/admin") {
       try {
         return await handleAdminApi(request, env, url);

@@ -116,7 +116,7 @@
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1);
@@ -132,6 +132,7 @@
     if (v === "dashboard") return renderDashboard();
     if (v === "vendas" || v === "nutricao") return renderBoard(v);
     if (v === "posvenda") return renderPostSale();
+    if (v === "whatsapp") return renderWhatsApp();
     return renderList();
   }
 
@@ -226,6 +227,9 @@
       var today = new Date(l.next_followup_at).toDateString() === new Date().toDateString();
       tags.push('<span class="tag' + (due ? " tag--late" : today ? " tag--due" : "") + '">Follow-up ' + fmtDate(l.next_followup_at, true) + "</span>");
     }
+    if (l.last_inbound_at && (!l.last_outbound_at || l.last_inbound_at > l.last_outbound_at) && ["ganho", "perdido", "sem_interesse"].indexOf(l.stage) < 0) {
+      tags.push('<span class="tag tag--late">Cliente aguardando · ' + ago(l.last_inbound_at) + "</span>");
+    }
     if (l.valor) tags.push('<span class="tag tag--val">' + brl(l.valor) + "</span>");
     if (l.perfil && l.perfil !== "Consumidor final") tags.push('<span class="tag">' + esc(l.perfil) + "</span>");
     if (l.canal_entrada === "whatsapp") tags.push('<span class="tag">WhatsApp direto</span>');
@@ -296,6 +300,74 @@
         dragId = null;
       });
     });
+  }
+
+  /* ---------------- integração WhatsApp ---------------- */
+  var WA_DEFAULTS = { phone_number_id: "1322084644326604", waba_id: "28707169048949738" };
+
+  function renderWhatsApp(result) {
+    var view = $("#view");
+    if (!result) view.innerHTML = '<p class="empty">Carregando…</p>';
+    api("/whatsapp").then(function (st) {
+      var conectado = !!st.conectado_em;
+      view.innerHTML =
+        '<div class="panels" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' +
+        '<div class="panel"><h3>Status</h3><dl class="answers">' +
+          row("Situação", conectado ? "✅ Conectado em " + fmtDate(st.conectado_em, true) : "⏳ Aguardando conexão") +
+          row("Número", st.numero ? st.numero + (st.nome_verificado ? " · " + st.nome_verificado : "") : "") +
+          row("Último webhook", st.ultimo_webhook ? fmtDate(st.ultimo_webhook, true) + " (há " + ago(st.ultimo_webhook) + ")" : "nenhum ainda") +
+          row("Mensagens recebidas", num(st.recebidas)) +
+          row("Respostas da loja", num(st.enviadas)) +
+        "</dl>" +
+        '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Cada conversa nova no WhatsApp da loja vira lead em <strong>Funil de vendas › Novo lead</strong>. ' +
+        "Quando a equipe responde pelo app, o lead passa para <strong>Em atendimento</strong>. Mensagens de quem já é lead entram no histórico.</p></div>" +
+
+        '<div class="panel"><h3>Credenciais da Meta</h3><form id="wa-form">' +
+          '<label class="fld"><span>Phone Number ID</span><input name="phone_number_id" value="' + esc(st.phone_number_id || WA_DEFAULTS.phone_number_id) + '"></label>' +
+          '<label class="fld"><span>ID da conta do WhatsApp Business</span><input name="waba_id" value="' + esc(st.waba_id || WA_DEFAULTS.waba_id) + '"></label>' +
+          '<label class="fld"><span>Chave secreta do aplicativo ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="off" placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
+          '<label class="fld"><span>Token de acesso ' + (st.tem_access_token ? "(salvo ✓)" : "(usado só para conectar; é apagado depois)") + '</span><input name="access_token" type="password" autocomplete="off" placeholder="' + (st.tem_access_token ? "••••••••" : "Cole o token EAAB…") + '"></label>' +
+          '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost" name="acao" value="salvar">Salvar</button><button class="btn btn--wa" name="acao" value="conectar">Salvar e conectar</button></div>' +
+          '<p class="form-msg"></p>' +
+        "</form></div>" +
+
+        '<div class="panel"><h3>Dados do webhook (configuração manual)</h3><dl class="answers">' +
+          row("URL de callback", st.callback_url) + row("Verify token", st.verify_token || "gerado ao salvar") + row("Campos", "messages, smb_message_echoes") +
+        '</dl><p class="muted" style="font-size:12.5px;margin:10px 0 0">O botão “Salvar e conectar” já cadastra isso na Meta. Use estes dados só se precisar configurar manualmente em Meta for Developers › WhatsApp › Configuração.</p></div>' +
+
+        (result ? '<div class="panel panel--wide"><h3>Resultado da conexão</h3><ul class="timeline">' + result.steps.map(function (s) {
+          return '<li class="' + (s.ok ? "t-etapa" : "t-nota") + '"><time>' + (s.ok ? "✅" : "❌") + " " + esc(s.label) + "</time>" + esc(s.detail) + "</li>";
+        }).join("") + "</ul></div>" : "") +
+        "</div>";
+
+      var form = $("#wa-form");
+      var clicked = "salvar";
+      $$("button[name=acao]", form).forEach(function (b) { b.addEventListener("click", function () { clicked = b.value; }); });
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var msg = $(".form-msg", form);
+        msg.textContent = "";
+        $$("button", form).forEach(function (b) { b.disabled = true; });
+        var body = { phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: form.app_secret.value, access_token: form.access_token.value };
+        api("/whatsapp", { method: "POST", body: body }).then(function () {
+          if (clicked !== "conectar") { toast("Credenciais salvas"); renderWhatsApp(); return; }
+          msg.style.color = "var(--soft)";
+          msg.textContent = "Conectando com a Meta…";
+          return api("/whatsapp/connect", { method: "POST", body: {} }).then(function (r) {
+            toast(r.ok ? "WhatsApp conectado!" : "A conexão não terminou — veja os detalhes", !r.ok);
+            renderWhatsApp(r);
+            updateWaDot();
+          });
+        }).catch(function (err) {
+          fail(err);
+          $$("button", form).forEach(function (b) { b.disabled = false; });
+        });
+      });
+    }).catch(fail);
+  }
+
+  function updateWaDot() {
+    api("/whatsapp").then(function (st) { var d = $("#wa-dot"); if (d) d.textContent = st.conectado_em ? "" : "!"; }).catch(function () {});
   }
 
   /* ---------------- lista ---------------- */
@@ -455,7 +527,8 @@
         '<div class="d-sec"><h3>Histórico e notas</h3>' +
           '<form class="note-form" id="note-form"><textarea name="text" placeholder="Registrar conversa, proposta enviada, objeção…" required></textarea><button class="btn btn--primary">Anotar</button></form>' +
           '<ul class="timeline">' + d.events.map(function (ev) {
-            return '<li class="t-' + esc(ev.type) + '"><time>' + fmtDate(ev.created_at, true) + (ev.user ? " · " + esc(ev.user) : "") + "</time>" + esc(ev.text) + "</li>";
+            var who = ev.type === "whatsapp_in" ? " · 💬 Cliente" : ev.type === "whatsapp_out" ? " · 🏪 Loja (WhatsApp)" : ev.user ? " · " + esc(ev.user) : "";
+            return '<li class="t-' + esc(ev.type) + '"><time>' + fmtDate(ev.created_at, true) + who + "</time>" + esc(ev.text) + "</li>";
           }).join("") + "</ul></div>" +
 
         '<div class="d-sec"><button class="btn btn--danger btn--sm" id="del-lead">Excluir lead</button></div>';
@@ -600,6 +673,7 @@
     S.config = r[0];
     $("#me").textContent = "(" + r[1].user.username + ")";
     route();
+    updateWaDot();
   }).catch(fail);
 
   // Atualiza a cada 60s para mostrar leads novos (sem atrapalhar quem está editando)

@@ -14,11 +14,12 @@ import { normalizePhone, stageLabel, PIPELINES } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
 
 const GRAPH = "https://graph.facebook.com/v23.0";
-const KEYS = ["whatsapp_phone_number_id", "whatsapp_waba_id", "whatsapp_app_secret", "whatsapp_access_token", "whatsapp_verify_token", "whatsapp_connected_at", "whatsapp_display_phone", "whatsapp_verified_name"];
+const KEYS = ["whatsapp_app_id", "whatsapp_phone_number_id", "whatsapp_waba_id", "whatsapp_app_secret", "whatsapp_access_token", "whatsapp_verify_token", "whatsapp_connected_at", "whatsapp_display_phone", "whatsapp_verified_name"];
 
 async function waConfig(env) {
   const s = await getSettings(env, KEYS);
   return {
+    appId: s.whatsapp_app_id || "",
     phoneNumberId: s.whatsapp_phone_number_id || "",
     wabaId: s.whatsapp_waba_id || "",
     appSecret: env.WHATSAPP_APP_SECRET || s.whatsapp_app_secret || "",
@@ -203,6 +204,7 @@ export async function whatsappStatus(env, origin) {
     "(SELECT COUNT(*) FROM wa_messages WHERE direction = 'out') AS enviadas"
   ).first();
   return {
+    app_id: cfg.appId,
     phone_number_id: cfg.phoneNumberId,
     waba_id: cfg.wabaId,
     tem_app_secret: !!cfg.appSecret,
@@ -220,6 +222,7 @@ export async function whatsappStatus(env, origin) {
 export async function saveWhatsAppSettings(env, body) {
   const vals = {};
   const id = (v) => String(v || "").replace(/\D/g, "");
+  if (body.app_id !== undefined) vals.whatsapp_app_id = id(body.app_id) || null;
   if (body.phone_number_id !== undefined) vals.whatsapp_phone_number_id = id(body.phone_number_id) || null;
   if (body.waba_id !== undefined) vals.whatsapp_waba_id = id(body.waba_id) || null;
   const secret = String(body.app_secret || "").trim();
@@ -277,28 +280,37 @@ export async function connectWhatsApp(env, origin) {
     !cfg.phoneNumberId && "Phone Number ID",
     !cfg.wabaId && "ID da conta do WhatsApp Business",
     !cfg.appSecret && "Chave secreta do aplicativo",
-    !cfg.accessToken && "Token de acesso",
-    !cfg.verifyToken && "Verify token"
+    !cfg.verifyToken && "Verify token",
+    !cfg.appId && !cfg.accessToken && "App ID ou token de acesso"
   ].filter(Boolean);
   if (missing.length) return { ok: false, steps: [{ label: "Credenciais", ok: false, detail: "Faltando: " + missing.join(", ") }] };
 
-  let appId = null;
+  let appId = cfg.appId || null;
   const callback = origin + "/api/whatsapp/webhook";
+  const tokenStep = async (label, fn) => cfg.accessToken
+    ? step(label, fn)
+    : (steps.push({ label, ok: false, detail: "Pulado: sem token de acesso." }), false);
 
-  if (!await step("Identificar o aplicativo da Meta", async () => {
-    try {
-      const app = await graph("/app", { token: cfg.accessToken });
-      appId = app.id;
-      return `${app.name || "App"} (ID ${app.id})`;
-    } catch {
-      const dbg = await graph(`/debug_token?input_token=${encodeURIComponent(cfg.accessToken)}`, { token: cfg.accessToken });
-      appId = dbg.data?.app_id;
-      if (!appId) throw new Error("Não foi possível identificar o app pelo token.");
-      return `${dbg.data.application || "App"} (ID ${appId})`;
-    }
-  })) return { ok: false, steps };
+  if (appId) {
+    steps.push({ label: "Identificar o aplicativo da Meta", ok: true, detail: "App ID informado: " + appId });
+  } else {
+    await step("Identificar o aplicativo da Meta", async () => {
+      try {
+        const app = await graph("/app", { token: cfg.accessToken });
+        appId = app.id;
+        return `${app.name || "App"} (ID ${app.id})`;
+      } catch (first) {
+        const dbg = await graph(`/debug_token?input_token=${encodeURIComponent(cfg.accessToken)}`, { token: cfg.accessToken })
+          .catch(() => { throw new Error(first.message + " — informe o App ID no campo acima para continuar."); });
+        appId = dbg.data?.app_id;
+        if (!appId) throw new Error("Não foi possível identificar o app pelo token. Informe o App ID.");
+        return `${dbg.data.application || "App"} (ID ${appId})`;
+      }
+    });
+    if (appId) await setSettings(env, { whatsapp_app_id: appId });
+  }
 
-  await step("Conferir o número de WhatsApp", async () => {
+  await tokenStep("Conferir o número de WhatsApp", async () => {
     const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,platform_type,is_on_biz_app`, { token: cfg.accessToken });
     await setSettings(env, { whatsapp_display_phone: n.display_phone_number || null, whatsapp_verified_name: n.verified_name || null });
     return `${n.display_phone_number || ""} · ${n.verified_name || ""}` +
@@ -306,7 +318,9 @@ export async function connectWhatsApp(env, origin) {
       (n.quality_rating ? ` · qualidade ${n.quality_rating}` : "");
   });
 
-  const hookOk = await step("Cadastrar o webhook do aplicativo", async () => {
+  const hookOk = !appId
+    ? (steps.push({ label: "Cadastrar o webhook do aplicativo", ok: false, detail: "Pulado: App ID desconhecido." }), false)
+    : await step("Cadastrar o webhook do aplicativo (usa só a chave secreta)", async () => {
     await graph(`/${appId}/subscriptions`, {
       method: "POST",
       form: {
@@ -321,12 +335,12 @@ export async function connectWhatsApp(env, origin) {
     return callback + " · campos: messages, smb_message_echoes";
   });
 
-  const subOk = await step("Assinar a conta do WhatsApp Business", async () => {
+  const subOk = await tokenStep("Assinar a conta do WhatsApp Business", async () => {
     await graph(`/${cfg.wabaId}/subscribed_apps`, { method: "POST", token: cfg.accessToken });
     return "Conta " + cfg.wabaId + " assinada";
   });
 
-  await step("Confirmar assinatura", async () => {
+  if (subOk) await step("Confirmar assinatura", async () => {
     const r = await graph(`/${cfg.wabaId}/subscribed_apps`, { token: cfg.accessToken });
     const apps = (r.data || []).map((a) => a.whatsapp_business_api_data?.name || a.whatsapp_business_api_data?.id || "app");
     if (!apps.length) throw new Error("Nenhum app assinado na conta.");

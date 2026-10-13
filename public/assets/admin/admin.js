@@ -325,6 +325,7 @@
         "Quando a equipe responde pelo app, o lead passa para <strong>Em atendimento</strong>. Mensagens de quem já é lead entram no histórico.</p></div>" +
 
         '<div class="panel"><h3>Credenciais da Meta</h3><form id="wa-form">' +
+          '<label class="fld"><span>App ID (Meta for Developers › seu app › topo da página)</span><input name="app_id" inputmode="numeric" value="' + esc(st.app_id || "") + '" placeholder="Opcional se o token funcionar"></label>' +
           '<label class="fld"><span>Phone Number ID</span><input name="phone_number_id" value="' + esc(st.phone_number_id || WA_DEFAULTS.phone_number_id) + '"></label>' +
           '<label class="fld"><span>ID da conta do WhatsApp Business</span><input name="waba_id" value="' + esc(st.waba_id || WA_DEFAULTS.waba_id) + '"></label>' +
           '<label class="fld"><span>Chave secreta do aplicativo ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
@@ -362,7 +363,7 @@
           $$("button", form).forEach(function (b) { b.disabled = false; });
           return;
         }
-        var body = { phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: secret, access_token: token };
+        var body = { app_id: form.app_id.value, phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: secret, access_token: token };
         api("/whatsapp", { method: "POST", body: body }).then(function () {
           if (clicked !== "conectar") { toast("Credenciais salvas"); renderWhatsApp(); return; }
           msg.style.color = "var(--soft)";

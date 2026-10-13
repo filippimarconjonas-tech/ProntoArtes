@@ -49,7 +49,9 @@
     whatsapp_invalido: "WhatsApp inválido.",
     valor_invalido: "Valor inválido.",
     senha_atual_incorreta: "Senha atual incorreta.",
-    senha_curta: "A nova senha precisa ter pelo menos 10 caracteres."
+    senha_curta: "A nova senha precisa ter pelo menos 10 caracteres.",
+    app_secret_invalido: "Chave secreta inválida: são 32 caracteres (0-9, a-f).",
+    token_invalido: "Token inválido: começa com “EA”."
   };
 
   function toast(msg, err) {
@@ -325,8 +327,8 @@
         '<div class="panel"><h3>Credenciais da Meta</h3><form id="wa-form">' +
           '<label class="fld"><span>Phone Number ID</span><input name="phone_number_id" value="' + esc(st.phone_number_id || WA_DEFAULTS.phone_number_id) + '"></label>' +
           '<label class="fld"><span>ID da conta do WhatsApp Business</span><input name="waba_id" value="' + esc(st.waba_id || WA_DEFAULTS.waba_id) + '"></label>' +
-          '<label class="fld"><span>Chave secreta do aplicativo ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="off" placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
-          '<label class="fld"><span>Token de acesso ' + (st.tem_access_token ? "(salvo ✓)" : "(usado só para conectar; é apagado depois)") + '</span><input name="access_token" type="password" autocomplete="off" placeholder="' + (st.tem_access_token ? "••••••••" : "Cole o token EAAB…") + '"></label>' +
+          '<label class="fld"><span>Chave secreta do aplicativo ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
+          '<label class="fld"><span>Token de acesso ' + (st.tem_access_token ? "(salvo ✓)" : "(usado só para conectar; é apagado depois)") + '</span><input name="access_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_access_token ? "••••••••" : "Cole o token EAAB…") + '"></label>' +
           '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost" name="acao" value="salvar">Salvar</button><button class="btn btn--wa" name="acao" value="conectar">Salvar e conectar</button></div>' +
           '<p class="form-msg"></p>' +
         "</form></div>" +
@@ -341,6 +343,7 @@
         "</div>";
 
       var form = $("#wa-form");
+      $$("input[readonly]", form).forEach(function (i) { i.addEventListener("focus", function () { i.removeAttribute("readonly"); }); });
       var clicked = "salvar";
       $$("button[name=acao]", form).forEach(function (b) { b.addEventListener("click", function () { clicked = b.value; }); });
       form.addEventListener("submit", function (e) {
@@ -348,7 +351,18 @@
         var msg = $(".form-msg", form);
         msg.textContent = "";
         $$("button", form).forEach(function (b) { b.disabled = true; });
-        var body = { phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: form.app_secret.value, access_token: form.access_token.value };
+        var secret = form.app_secret.value.trim(), token = form.access_token.value.trim();
+        if (secret && !/^[0-9a-f]{32}$/i.test(secret)) {
+          msg.textContent = "A chave secreta do aplicativo tem 32 letras/números (0-9, a-f). Confira se o navegador não preencheu o campo sozinho.";
+          $$("button", form).forEach(function (b) { b.disabled = false; });
+          return;
+        }
+        if (token && !/^EA[A-Za-z0-9]{50,}$/.test(token)) {
+          msg.textContent = "O token da Meta começa com “EA” e é bem longo. Confira se o navegador não preencheu o campo sozinho.";
+          $$("button", form).forEach(function (b) { b.disabled = false; });
+          return;
+        }
+        var body = { phone_number_id: form.phone_number_id.value, waba_id: form.waba_id.value, app_secret: secret, access_token: token };
         api("/whatsapp", { method: "POST", body: body }).then(function () {
           if (clicked !== "conectar") { toast("Credenciais salvas"); renderWhatsApp(); return; }
           msg.style.color = "var(--soft)";

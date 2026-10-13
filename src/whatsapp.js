@@ -222,8 +222,12 @@ export async function saveWhatsAppSettings(env, body) {
   const id = (v) => String(v || "").replace(/\D/g, "");
   if (body.phone_number_id !== undefined) vals.whatsapp_phone_number_id = id(body.phone_number_id) || null;
   if (body.waba_id !== undefined) vals.whatsapp_waba_id = id(body.waba_id) || null;
-  if (body.app_secret) vals.whatsapp_app_secret = String(body.app_secret).trim();
-  if (body.access_token) vals.whatsapp_access_token = String(body.access_token).trim();
+  const secret = String(body.app_secret || "").trim();
+  const token = String(body.access_token || "").trim();
+  if (secret && !/^[0-9a-f]{32}$/i.test(secret)) throw Object.assign(new Error("app_secret_invalido"), { code: "app_secret_invalido" });
+  if (token && !/^EA[A-Za-z0-9]{50,}$/.test(token)) throw Object.assign(new Error("token_invalido"), { code: "token_invalido" });
+  if (secret) vals.whatsapp_app_secret = secret;
+  if (token) vals.whatsapp_access_token = token;
   const cur = await getSettings(env, ["whatsapp_verify_token"]);
   if (!cur.whatsapp_verify_token) {
     vals.whatsapp_verify_token = [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, "0")).join("");

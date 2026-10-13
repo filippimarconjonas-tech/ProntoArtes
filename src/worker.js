@@ -369,7 +369,12 @@ async function handleAdminApi(request, env, url) {
 
   if (path === "/whatsapp" && method === "GET") return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
   if (path === "/whatsapp" && method === "POST") {
-    await saveWhatsAppSettings(env, (await readJson(request)) || {});
+    try {
+      await saveWhatsAppSettings(env, (await readJson(request)) || {});
+    } catch (err) {
+      if (err.code) return json({ ok: false, error: err.code }, 400);
+      throw err;
+    }
     return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
   }
   if (path === "/whatsapp/connect" && method === "POST") {

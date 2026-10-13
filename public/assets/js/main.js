@@ -390,6 +390,7 @@
         cidade: f.cidade.value.trim(),
         email: f.email.value.trim(),
         interesse: f.interesse.value,
+        prazo: f.prazo.value,
         mensagem: f.mensagem.value.trim()
       });
       var url = goToWhatsApp(lead);

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Entrar | CRM Pronto Artes</title>
+  <link rel="icon" href="/assets/img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Maven+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin/admin.css">
+</head>
+<body class="login-body">
+  <main class="login">
+    <form class="login__card" id="login-form" novalidate>
+      <img src="/assets/img/logo-prontoartes.png" alt="Pronto Artes" class="login__logo" width="600" height="322">
+      <h1>CRM Pronto Artes</h1>
+      <p class="muted">Acesso restrito à equipe.</p>
+      <label class="fld">
+        <span>Usuário</span>
+        <input name="username" autocomplete="username" required autofocus>
+      </label>
+      <label class="fld">
+        <span>Senha</span>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="btn btn--primary btn--block" type="submit">Entrar</button>
+      <p class="form-msg" role="alert" aria-live="polite"></p>
+    </form>
+  </main>
+  <script>
+    (function () {
+      var form = document.getElementById("login-form");
+      var msg = form.querySelector(".form-msg");
+      var errors = {
+        credenciais_invalidas: "Usuário ou senha incorretos.",
+        muitas_tentativas: "Muitas tentativas. Aguarde 15 minutos e tente novamente."
+      };
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var btn = form.querySelector("button");
+        btn.disabled = true; msg.textContent = "";
+        fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: form.username.value.trim(), password: form.password.value })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d.ok) { location.replace("/admin"); return; }
+          msg.textContent = errors[d.error] || "Não foi possível entrar. Tente novamente.";
+          btn.disabled = false;
+        }).catch(function () {
+          msg.textContent = "Sem conexão. Tente novamente.";
+          btn.disabled = false;
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

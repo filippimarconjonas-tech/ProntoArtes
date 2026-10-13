@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>CRM | Pronto Artes</title>
+  <link rel="icon" href="/assets/img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Maven+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin/admin.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="side__brand">
+        <img src="/assets/img/logo-prontoartes.png" alt="Pronto Artes" width="600" height="322">
+        <span>CRM</span>
+      </div>
+      <nav class="side__nav" aria-label="Seções do CRM">
+        <a href="#dashboard" data-view="dashboard">Painel</a>
+        <a href="#vendas" data-view="vendas">Funil de vendas <b class="count" data-count="vendas"></b></a>
+        <a href="#nutricao" data-view="nutricao">Nutrição (C) <b class="count" data-count="nutricao"></b></a>
+        <a href="#posvenda" data-view="posvenda">Pós-venda <b class="count" data-count="posvenda"></b></a>
+        <a href="#lista" data-view="lista">Todos os leads</a>
+      </nav>
+      <div class="side__foot">
+        <a href="/api/admin/export.csv" class="link">Exportar CSV</a>
+        <button class="link" data-action="password">Alterar senha</button>
+        <button class="link" data-action="logout">Sair <span id="me" class="muted"></span></button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <h1 id="view-title">Painel</h1>
+        <div class="topbar__tools">
+          <input type="search" id="search" placeholder="Buscar nome, WhatsApp, cidade, produto…" aria-label="Buscar leads">
+          <div class="seg" role="group" aria-label="Filtrar por faixa" id="faixa-filter">
+            <button data-faixa="" class="is-on">Todas</button>
+            <button data-faixa="A" class="fa">A</button>
+            <button data-faixa="B" class="fb">B</button>
+            <button data-faixa="C" class="fc">C</button>
+          </div>
+          <button class="btn btn--primary" data-action="new-lead">+ Novo lead</button>
+        </div>
+      </header>
+
+      <section id="view" class="view" aria-live="polite"></section>
+    </div>
+  </div>
+
+  <!-- Detalhe do lead -->
+  <div class="drawer" id="drawer" hidden>
+    <div class="drawer__backdrop" data-close-drawer></div>
+    <aside class="drawer__panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <button class="x" data-close-drawer aria-label="Fechar">×</button>
+      <div id="drawer-body"></div>
+    </aside>
+  </div>
+
+  <!-- Modal genérico -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal__backdrop" data-close-modal></div>
+    <div class="modal__box" role="dialog" aria-modal="true">
+      <button class="x" data-close-modal aria-label="Fechar">×</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/assets/admin/admin.js" defer></script>
+</body>
+</html>

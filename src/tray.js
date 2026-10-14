@@ -11,7 +11,7 @@
 import { normalizePhone } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
 
-const KEYS = ["tray_api_address", "tray_consumer_key", "tray_consumer_secret", "tray_code",
+const KEYS = ["tray_store_url", "tray_api_address", "tray_consumer_key", "tray_consumer_secret", "tray_code",
   "tray_access_token", "tray_refresh_token", "tray_token_expires", "tray_webhook_key", "tray_last_sync", "tray_last_webhook"];
 
 const now = () => new Date().toISOString();
@@ -19,6 +19,7 @@ const now = () => new Date().toISOString();
 async function trayConfig(env) {
   const s = await getSettings(env, KEYS);
   return {
+    store: (s.tray_store_url || "https://www.prontoartes.com.br").replace(/\/+$/, ""),
     api: (s.tray_api_address || "").replace(/\/+$/, ""),
     key: s.tray_consumer_key || "",
     secret: s.tray_consumer_secret || "",
@@ -211,6 +212,9 @@ export async function handleTrayWebhook(request, env, deps) {
 export async function trayStatus(env, origin) {
   const cfg = await trayConfig(env);
   return {
+    store_url: cfg.store,
+    consumer_key: cfg.key, // identificação pública do app (não é segredo); usada no link de autorização
+    callback_url: cfg.webhookKey ? `${origin}/api/tray/callback/${cfg.webhookKey}` : null,
     api_address: cfg.api,
     tem_consumer_key: !!cfg.key,
     tem_consumer_secret: !!cfg.secret,
@@ -229,6 +233,11 @@ export async function saveTraySettings(env, body) {
     if (a && !/^https:\/\/[^\s]+\/web_api$/i.test(a)) throw new TrayError("api_address_invalido", "O endereço da API deve começar com https:// e terminar em /web_api.");
     vals.tray_api_address = a || null;
   }
+  if (body.store_url !== undefined) {
+    const u = String(body.store_url || "").trim().replace(/\/+$/, "");
+    if (u && !/^https:\/\/[a-z0-9.-]+$/i.test(u)) throw new TrayError("store_url_invalida", "O endereço da loja deve ser como https://www.prontoartes.com.br");
+    vals.tray_store_url = u || null;
+  }
   for (const [field, key] of [["consumer_key", "tray_consumer_key"], ["consumer_secret", "tray_consumer_secret"]]) {
     const v = String(body[field] || "").trim();
     if (v) vals[key] = v;
@@ -238,6 +247,28 @@ export async function saveTraySettings(env, body) {
   const cur = await getSettings(env, ["tray_webhook_key"]);
   if (!cur.tray_webhook_key) vals.tray_webhook_key = [...crypto.getRandomValues(new Uint8Array(18))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await setSettings(env, vals);
+}
+
+/**
+ * Retorno da autorização na loja (auth.php da Tray redireciona para cá com code e api_address).
+ * A chave no caminho garante que só o link gerado pelo painel é aceito.
+ */
+export async function handleTrayCallback(request, env, key) {
+  const url = new URL(request.url);
+  const cfg = await trayConfig(env);
+  if (!cfg.webhookKey || key !== cfg.webhookKey) return new Response("Forbidden", { status: 403 });
+  const code = url.searchParams.get("code") || "";
+  const apiAddress = (url.searchParams.get("api_address") || "").replace(/\/+$/, "");
+  const back = (status) => Response.redirect(new URL(`/admin#tray`, url).toString() + `?tray=${status}`, 302);
+  if (!code || !/^https:\/\/[^\s]+\/web_api$/i.test(apiAddress)) return back("sem_code");
+  await setSettings(env, { tray_code: code, tray_api_address: apiAddress, tray_access_token: null, tray_refresh_token: null, tray_token_expires: null });
+  try {
+    await authorize(env, { ...cfg, code, api: apiAddress });
+    return back("ok");
+  } catch (err) {
+    console.error("tray_callback_error", err.message);
+    return back("erro");
+  }
 }
 
 /** Testa a conexão e processa os pedidos mais recentes. */

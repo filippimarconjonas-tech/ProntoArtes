@@ -14,7 +14,7 @@ import {
   hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
-import { handleTrayWebhook, trayStatus, saveTraySettings, syncTray } from "./tray.js";
+import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
 
@@ -336,7 +336,7 @@ async function handleAdminApi(request, env, url) {
   const user = await getSessionUser(request, env);
   if (!user) return json({ ok: false, error: "nao_autenticado" }, 401);
 
-  // Escritas exigem JSON (proteção extra contra CSRF, além do SameSite=Strict)
+  // Escritas exigem JSON (proteção extra contra CSRF, além do SameSite=Lax)
   if (method !== "GET" && !(request.headers.get("content-type") || "").includes("application/json")) {
     return json({ ok: false, error: "content_type" }, 415);
   }
@@ -493,6 +493,8 @@ export default {
     const p = url.pathname;
 
     if (p === "/api/lead") return handlePublicLead(request, env, ctx);
+    const tcb = p.match(/^\/api\/tray\/callback\/([0-9a-f]+)$/);
+    if (tcb) return handleTrayCallback(request, env, tcb[1]);
     if (p === "/api/tray/webhook") {
       try {
         return await handleTrayWebhook(request, env, { upsertLead, logEvent });

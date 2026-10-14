@@ -50,6 +50,7 @@
     valor_invalido: "Valor inválido.",
     senha_atual_incorreta: "Senha atual incorreta.",
     senha_curta: "A nova senha precisa ter pelo menos 10 caracteres.",
+    store_url_invalida: "Endereço da loja inválido: use https://www.prontoartes.com.br",
     api_address_invalido: "Endereço da API inválido: deve começar com https:// e terminar em /web_api.",
     app_secret_invalido: "Chave secreta inválida: são 32 caracteres (0-9, a-f).",
     token_invalido: "Token inválido: começa com “EA”."
@@ -122,7 +123,7 @@
   var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray" };
 
   function route() {
-    var v = (location.hash || "#dashboard").slice(1);
+    var v = (location.hash || "#dashboard").slice(1).split("?")[0];
     if (!TITLES[v]) v = "dashboard";
     S.view = v;
     $("#view-title").textContent = TITLES[v];
@@ -624,6 +625,14 @@
   /* ---------------- integração Loja Tray ---------------- */
   function renderTray(result) {
     var view = $("#view");
+    var q = (location.hash.split("?")[1] || "");
+    if (q) {
+      var flag = new URLSearchParams(q).get("tray");
+      history.replaceState(null, "", location.pathname + "#tray");
+      if (flag === "ok") toast("Loja Tray autorizada! Clique em “Salvar e sincronizar pedidos”.");
+      else if (flag === "erro") toast("A Tray devolveu o code, mas a autorização falhou. Confira consumer key e secret.", true);
+      else if (flag === "sem_code") toast("A Tray não devolveu o code. Tente autorizar de novo.", true);
+    }
     if (!result) view.innerHTML = '<p class="empty">Carregando…</p>';
     api("/tray").then(function (st) {
       view.innerHTML = '<div class="panels" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' +
@@ -636,16 +645,22 @@
         "O lead é encontrado pelo telefone ou e-mail do cliente; quem comprou direto na loja vira lead com origem “Loja Tray”.</p></div>" +
 
         '<div class="panel"><h3>Credenciais da API Tray</h3><form id="tray-form">' +
-          '<label class="fld"><span>Endereço da API da loja (api_address)</span><input name="api_address" value="' + esc(st.api_address || "") + '" placeholder="https://www.prontoartes.com.br/web_api"></label>' +
+          '<label class="fld"><span>Endereço da loja</span><input name="store_url" value="' + esc(st.store_url || "") + '" placeholder="https://www.prontoartes.com.br"></label>' +
+          '<label class="fld"><span>Endereço da API da loja (api_address)</span><input name="api_address" value="' + esc(st.api_address || "") + '" placeholder="Preenchido sozinho ao autorizar na loja"></label>' +
           '<label class="fld"><span>Consumer key ' + (st.tem_consumer_key ? "(salva ✓)" : "") + '</span><input name="consumer_key" type="password" autocomplete="new-password" data-lpignore="true" readonly placeholder="' + (st.tem_consumer_key ? "••••••••" : "Do aplicativo na Tray") + '"></label>' +
           '<label class="fld"><span>Consumer secret ' + (st.tem_consumer_secret ? "(salvo ✓)" : "") + '</span><input name="consumer_secret" type="password" autocomplete="new-password" data-lpignore="true" readonly placeholder="' + (st.tem_consumer_secret ? "••••••••" : "Do aplicativo na Tray") + '"></label>' +
-          '<label class="fld"><span>Code de autorização da loja</span><input name="code" autocomplete="off" placeholder="' + (st.autorizada ? "Já autorizada — preencha só para reautorizar" : "Gerado ao autorizar o app na loja") + '"></label>' +
+          (st.consumer_key && st.callback_url ? '<p style="margin:4px 0 14px"><a class="btn btn--wa btn--sm" target="_blank" rel="noopener" href="' +
+            esc(st.store_url + "/auth.php?response_type=code&consumer_key=" + encodeURIComponent(st.consumer_key) + "&callback=" + encodeURIComponent(st.callback_url)) +
+            '">Autorizar na loja Tray ↗</a> <small class="muted">abre a Tray; ao confirmar, o code volta sozinho para o CRM</small></p>'
+            : '<p class="muted" style="font-size:12.5px;margin:0 0 12px">Salve o consumer key e o secret para liberar o botão “Autorizar na loja Tray”.</p>') +
+          '<label class="fld"><span>Code de autorização (manual, se precisar)</span><input name="code" autocomplete="off" placeholder="' + (st.autorizada ? "Já autorizada — preencha só para reautorizar" : "Gerado ao autorizar o app na loja") + '"></label>' +
           '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost" name="acao" value="salvar">Salvar</button><button class="btn btn--primary" name="acao" value="sync">Salvar e sincronizar pedidos</button></div>' +
           '<p class="form-msg"></p>' +
         "</form></div>" +
 
         '<div class="panel"><h3>URL de notificação (webhook)</h3>' +
           (st.webhook_url ? '<p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.webhook_url) + "</p>" : '<p class="empty">Gerada ao salvar as credenciais.</p>') +
+          (st.callback_url ? '<p class="muted" style="font-size:12.5px;margin:12px 0 4px">URL de retorno (callback) — se o cadastro do aplicativo na Tray pedir:</p><p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.callback_url) + "</p>" : "") +
           '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o botão de sincronizar continua disponível como reforço.</p></div>' +
 
         (result ? '<div class="panel panel--wide"><h3>Resultado</h3><ul class="timeline">' + result.steps.map(function (s) {
@@ -670,7 +685,7 @@
         var msg = $(".form-msg", form);
         msg.textContent = "";
         $$("button", form).forEach(function (b) { b.disabled = true; });
-        api("/tray", { method: "POST", body: { api_address: form.api_address.value, consumer_key: form.consumer_key.value, consumer_secret: form.consumer_secret.value, code: form.code.value } })
+        api("/tray", { method: "POST", body: { store_url: form.store_url.value, api_address: form.api_address.value, consumer_key: form.consumer_key.value, consumer_secret: form.consumer_secret.value, code: form.code.value } })
           .then(function () {
             if (clicked !== "sync") { toast("Credenciais salvas"); renderTray(); return; }
             msg.style.color = "var(--soft)";

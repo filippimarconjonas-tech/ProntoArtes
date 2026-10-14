@@ -49,7 +49,7 @@ export async function createSession(env, userId) {
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
   await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
     .bind(await sha256(token), userId, expires).run();
-  return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DAYS * 86400}`;
+  return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}`;
 }
 
 export async function getSessionUser(request, env) {
@@ -64,7 +64,7 @@ export async function getSessionUser(request, env) {
 export async function destroySession(request, env) {
   const token = readCookie(request, COOKIE);
   if (token) await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await sha256(token)).run();
-  return `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+  return `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
 /** Bloqueia o IP após 8 tentativas erradas em 15 minutos. */

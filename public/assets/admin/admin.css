@@ -195,6 +195,7 @@ td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .timeline li.t-nota { border-color: var(--gold); }
 .timeline li.t-etapa { border-color: var(--brand); }
 .timeline li.t-whatsapp_in { border-color: var(--wa); background: #f0faf4; padding: 6px 10px; border-radius: 0 8px 8px 0; }
+.timeline li.t-tray { border-color: #2f6fb3; background: #eef4fb; padding: 6px 10px; border-radius: 0 8px 8px 0; }
 .timeline li.t-whatsapp_out { border-color: #8aa; background: #f4f6f7; padding: 6px 10px; border-radius: 0 8px 8px 0; }
 .timeline time { display: block; font-size: 11.5px; color: var(--soft); }
 .note-form { display: flex; gap: 8px; margin-bottom: 12px; }

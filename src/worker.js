@@ -14,6 +14,7 @@ import {
   hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
+import { handleTrayWebhook, trayStatus, saveTraySettings, syncTray } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
 
@@ -395,6 +396,22 @@ async function handleAdminApi(request, env, url) {
     }
   }
 
+  if (path === "/tray" && method === "GET") return json({ ok: true, ...(await trayStatus(env, url.origin)) });
+  if (path === "/tray" && method === "POST") {
+    try {
+      await saveTraySettings(env, (await readJson(request)) || {});
+    } catch (err) {
+      if (err.code) return json({ ok: false, error: err.code, message: err.message }, 400);
+      throw err;
+    }
+    return json({ ok: true, ...(await trayStatus(env, url.origin)) });
+  }
+  if (path === "/tray/sync" && method === "POST") {
+    const r = await syncTray(env, { upsertLead, logEvent });
+    console.log("tray_sync", JSON.stringify(r.steps));
+    return json({ ok: true, conectado: r.ok, steps: r.steps, pedidos: r.pedidos, status: await trayStatus(env, url.origin) });
+  }
+
   if (path === "/whatsapp/embedded" && method === "POST") {
     const r = await completeEmbeddedSignup(env, url.origin, (await readJson(request)) || {});
     console.log("whatsapp_embedded", JSON.stringify(r));
@@ -476,6 +493,14 @@ export default {
     const p = url.pathname;
 
     if (p === "/api/lead") return handlePublicLead(request, env, ctx);
+    if (p === "/api/tray/webhook") {
+      try {
+        return await handleTrayWebhook(request, env, { upsertLead, logEvent });
+      } catch (err) {
+        console.error("tray_error", err?.stack || err?.message);
+        return new Response("Erro", { status: 500 });
+      }
+    }
     if (p === "/api/whatsapp/webhook") {
       try {
         return await handleWhatsAppWebhook(request, env, { upsertLead, logEvent });

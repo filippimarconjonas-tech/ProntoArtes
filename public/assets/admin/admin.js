@@ -50,6 +50,7 @@
     valor_invalido: "Valor inválido.",
     senha_atual_incorreta: "Senha atual incorreta.",
     senha_curta: "A nova senha precisa ter pelo menos 10 caracteres.",
+    api_address_invalido: "Endereço da API inválido: deve começar com https:// e terminar em /web_api.",
     app_secret_invalido: "Chave secreta inválida: são 32 caracteres (0-9, a-f).",
     token_invalido: "Token inválido: começa com “EA”."
   };
@@ -118,7 +119,7 @@
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1);
@@ -136,6 +137,7 @@
     if (v === "posvenda") return renderPostSale();
     if (v === "whatsapp") return renderWhatsApp();
     if (v === "modelos") return renderTemplates();
+    if (v === "tray") return renderTray();
     return renderList();
   }
 
@@ -236,6 +238,7 @@
     if (l.valor) tags.push('<span class="tag tag--val">' + brl(l.valor) + "</span>");
     if (l.perfil && l.perfil !== "Consumidor final") tags.push('<span class="tag">' + esc(l.perfil) + "</span>");
     if (l.canal_entrada === "whatsapp") tags.push('<span class="tag">WhatsApp direto</span>');
+    if (l.canal_entrada === "tray") tags.push('<span class="tag">Comprou na loja</span>');
     if (l.envios > 1) tags.push('<span class="tag">' + l.envios + " envios</span>");
     if (l.stage === "perdido" && l.motivo_perda) tags.push('<span class="tag">' + esc(l.motivo_perda) + "</span>");
     if (l.stage === "ganho" && l.canal_fechamento) tags.push('<span class="tag">' + esc(canalLabel(l.canal_fechamento)) + "</span>");
@@ -618,6 +621,72 @@
     });
   }
 
+  /* ---------------- integração Loja Tray ---------------- */
+  function renderTray(result) {
+    var view = $("#view");
+    if (!result) view.innerHTML = '<p class="empty">Carregando…</p>';
+    api("/tray").then(function (st) {
+      view.innerHTML = '<div class="panels" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' +
+        '<div class="panel"><h3>Status</h3><dl class="answers">' +
+          row("Situação", st.autorizada ? "✅ Loja autorizada" : "⏳ Aguardando autorização") +
+          row("Última sincronização", st.ultima_sincronizacao ? fmtDate(st.ultima_sincronizacao, true) : "nunca") +
+          row("Última notificação", st.ultima_notificacao ? fmtDate(st.ultima_notificacao, true) : "nenhuma ainda") +
+        "</dl>" +
+        '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Pedido criado na loja → lead em <strong>Aguardando pagamento</strong>. Pagamento aprovado → <strong>Venda fechada (Site Tray)</strong> com valor e nº do pedido, e o pós-venda acompanha o status (enviado, entregue). ' +
+        "O lead é encontrado pelo telefone ou e-mail do cliente; quem comprou direto na loja vira lead com origem “Loja Tray”.</p></div>" +
+
+        '<div class="panel"><h3>Credenciais da API Tray</h3><form id="tray-form">' +
+          '<label class="fld"><span>Endereço da API da loja (api_address)</span><input name="api_address" value="' + esc(st.api_address || "") + '" placeholder="https://www.prontoartes.com.br/web_api"></label>' +
+          '<label class="fld"><span>Consumer key ' + (st.tem_consumer_key ? "(salva ✓)" : "") + '</span><input name="consumer_key" type="password" autocomplete="new-password" data-lpignore="true" readonly placeholder="' + (st.tem_consumer_key ? "••••••••" : "Do aplicativo na Tray") + '"></label>' +
+          '<label class="fld"><span>Consumer secret ' + (st.tem_consumer_secret ? "(salvo ✓)" : "") + '</span><input name="consumer_secret" type="password" autocomplete="new-password" data-lpignore="true" readonly placeholder="' + (st.tem_consumer_secret ? "••••••••" : "Do aplicativo na Tray") + '"></label>' +
+          '<label class="fld"><span>Code de autorização da loja</span><input name="code" autocomplete="off" placeholder="' + (st.autorizada ? "Já autorizada — preencha só para reautorizar" : "Gerado ao autorizar o app na loja") + '"></label>' +
+          '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost" name="acao" value="salvar">Salvar</button><button class="btn btn--primary" name="acao" value="sync">Salvar e sincronizar pedidos</button></div>' +
+          '<p class="form-msg"></p>' +
+        "</form></div>" +
+
+        '<div class="panel"><h3>URL de notificação (webhook)</h3>' +
+          (st.webhook_url ? '<p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.webhook_url) + "</p>" : '<p class="empty">Gerada ao salvar as credenciais.</p>') +
+          '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o botão de sincronizar continua disponível como reforço.</p></div>' +
+
+        (result ? '<div class="panel panel--wide"><h3>Resultado</h3><ul class="timeline">' + result.steps.map(function (s) {
+          return '<li class="' + (s.ok ? "t-etapa" : "t-nota") + '"><time>' + (s.ok ? "✅" : "❌") + " " + esc(s.label) + "</time>" + esc(s.detail) + "</li>";
+        }).join("") + "</ul>" +
+        (result.pedidos && result.pedidos.length ? '<div class="table-wrap" style="box-shadow:none;margin-top:12px"><table><thead><tr><th>Pedido</th><th>Status na Tray</th><th>Lead</th><th>O que foi feito</th></tr></thead><tbody>' +
+          result.pedidos.map(function (r) {
+            return "<tr><td>" + esc(r.pedido) + "</td><td>" + esc(r.status || "") + "</td><td>" + (r.lead_id ? '<a href="#" data-open-lead="' + r.lead_id + '">#' + r.lead_id + "</a>" : "—") +
+              '</td><td style="white-space:normal">' + esc(r.acao) + "</td></tr>";
+          }).join("") + "</tbody></table></div>" : "") +
+        "</div>" : "") + "</div>";
+
+      $$("[data-open-lead]", view).forEach(function (a) {
+        a.addEventListener("click", function (e) { e.preventDefault(); openLead(+a.getAttribute("data-open-lead")); });
+      });
+      var form = $("#tray-form");
+      $$("input[readonly]", form).forEach(function (i) { i.addEventListener("focus", function () { i.removeAttribute("readonly"); }); });
+      var clicked = "salvar";
+      $$("button[name=acao]", form).forEach(function (b) { b.addEventListener("click", function () { clicked = b.value; }); });
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var msg = $(".form-msg", form);
+        msg.textContent = "";
+        $$("button", form).forEach(function (b) { b.disabled = true; });
+        api("/tray", { method: "POST", body: { api_address: form.api_address.value, consumer_key: form.consumer_key.value, consumer_secret: form.consumer_secret.value, code: form.code.value } })
+          .then(function () {
+            if (clicked !== "sync") { toast("Credenciais salvas"); renderTray(); return; }
+            msg.style.color = "var(--soft)";
+            msg.textContent = "Conectando com a Tray e lendo pedidos…";
+            return api("/tray/sync", { method: "POST", body: {} }).then(function (r) {
+              toast(r.conectado ? "Pedidos sincronizados" : "A sincronização não terminou — veja os detalhes", !r.conectado);
+              return loadLeads().then(function () { renderTray(r); });
+            });
+          }).catch(function (err) {
+            msg.textContent = err.serverMessage || ERR[err.code] || err.code;
+            $$("button", form).forEach(function (b) { b.disabled = false; });
+          });
+      });
+    }).catch(fail);
+  }
+
   /* ---------------- lista ---------------- */
   function renderList() {
     var list = filtered();
@@ -777,7 +846,7 @@
         '<div class="d-sec"><h3>Histórico e notas</h3>' +
           '<form class="note-form" id="note-form"><textarea name="text" placeholder="Registrar conversa, proposta enviada, objeção…" required></textarea><button class="btn btn--primary">Anotar</button></form>' +
           '<ul class="timeline">' + d.events.map(function (ev) {
-            var who = ev.type === "whatsapp_in" ? " · 💬 Cliente" : ev.type === "whatsapp_out" ? " · 🏪 Loja (WhatsApp)" : ev.user ? " · " + esc(ev.user) : "";
+            var who = ev.type === "tray" ? " · 🛒 Loja Tray" : ev.type === "whatsapp_in" ? " · 💬 Cliente" : ev.type === "whatsapp_out" ? " · 🏪 Loja (WhatsApp)" : ev.user ? " · " + esc(ev.user) : "";
             return '<li class="t-' + esc(ev.type) + '"><time>' + fmtDate(ev.created_at, true) + who + "</time>" + esc(ev.text) + "</li>";
           }).join("") + "</ul></div>" +
 

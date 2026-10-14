@@ -277,6 +277,8 @@ export async function graph(path, { method = "GET", token, form, json } = {}) {
  */
 export async function connectWhatsApp(env, origin) {
   const cfg = await waConfig(env);
+  // Token de configuração (temporário) ou, se não houver, o token permanente do Usuário do sistema
+  const tok = cfg.accessToken || cfg.apiToken;
   const steps = [];
   const step = async (label, fn) => {
     try {
@@ -294,13 +296,13 @@ export async function connectWhatsApp(env, origin) {
     !cfg.wabaId && "ID da conta do WhatsApp Business",
     !cfg.appSecret && "Chave secreta do aplicativo",
     !cfg.verifyToken && "Verify token",
-    !cfg.appId && !cfg.accessToken && "App ID ou token de acesso"
+    !cfg.appId && !tok && "App ID ou token de acesso"
   ].filter(Boolean);
   if (missing.length) return { ok: false, steps: [{ label: "Credenciais", ok: false, detail: "Faltando: " + missing.join(", ") }] };
 
   let appId = cfg.appId || null;
   const callback = origin + "/api/whatsapp/webhook";
-  const tokenStep = async (label, fn) => cfg.accessToken
+  const tokenStep = async (label, fn) => tok
     ? step(label, fn)
     : (steps.push({ label, ok: false, detail: "Pulado: sem token de acesso." }), false);
 
@@ -309,11 +311,11 @@ export async function connectWhatsApp(env, origin) {
   } else {
     await step("Identificar o aplicativo da Meta", async () => {
       try {
-        const app = await graph("/app", { token: cfg.accessToken });
+        const app = await graph("/app", { token: tok });
         appId = app.id;
         return `${app.name || "App"} (ID ${app.id})`;
       } catch (first) {
-        const dbg = await graph(`/debug_token?input_token=${encodeURIComponent(cfg.accessToken)}`, { token: cfg.accessToken })
+        const dbg = await graph(`/debug_token?input_token=${encodeURIComponent(tok)}`, { token: tok })
           .catch(() => { throw new Error(first.message + " — informe o App ID no campo acima para continuar."); });
         appId = dbg.data?.app_id;
         if (!appId) throw new Error("Não foi possível identificar o app pelo token. Informe o App ID.");
@@ -324,7 +326,7 @@ export async function connectWhatsApp(env, origin) {
   }
 
   await tokenStep("Conferir o número de WhatsApp", async () => {
-    const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,platform_type,is_on_biz_app`, { token: cfg.accessToken });
+    const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,platform_type,is_on_biz_app`, { token: tok });
     await setSettings(env, { whatsapp_display_phone: n.display_phone_number || null, whatsapp_verified_name: n.verified_name || null });
     return `${n.display_phone_number || ""} · ${n.verified_name || ""}` +
       (n.is_on_biz_app === true ? " · coexistência com o app ativa" : n.is_on_biz_app === false ? " · número NÃO está no WhatsApp Business App" : "") +
@@ -349,12 +351,12 @@ export async function connectWhatsApp(env, origin) {
   });
 
   const subOk = await tokenStep("Assinar a conta do WhatsApp Business", async () => {
-    await graph(`/${cfg.wabaId}/subscribed_apps`, { method: "POST", token: cfg.accessToken });
+    await graph(`/${cfg.wabaId}/subscribed_apps`, { method: "POST", token: tok });
     return "Conta " + cfg.wabaId + " assinada";
   });
 
   if (subOk) await step("Confirmar assinatura", async () => {
-    const r = await graph(`/${cfg.wabaId}/subscribed_apps`, { token: cfg.accessToken });
+    const r = await graph(`/${cfg.wabaId}/subscribed_apps`, { token: tok });
     const apps = (r.data || []).map((a) => a.whatsapp_business_api_data?.name || a.whatsapp_business_api_data?.id || "app");
     if (!apps.length) throw new Error("Nenhum app assinado na conta.");
     return "Apps assinados: " + apps.join(", ");
@@ -362,8 +364,8 @@ export async function connectWhatsApp(env, origin) {
 
   const ok = hookOk && subOk;
   if (ok) {
-    await setSettings(env, { whatsapp_connected_at: new Date().toISOString(), whatsapp_access_token: null });
-    steps.push({ label: "Segurança", ok: true, detail: "Token de acesso apagado do banco (não é necessário para receber mensagens)." });
+    await setSettings(env, { whatsapp_connected_at: new Date().toISOString(), ...(cfg.accessToken ? { whatsapp_access_token: null } : {}) });
+    if (cfg.accessToken) steps.push({ label: "Segurança", ok: true, detail: "Token temporário de configuração apagado do banco. O token permanente continua salvo para envio de mensagens." });
   }
   return { ok, steps };
 }

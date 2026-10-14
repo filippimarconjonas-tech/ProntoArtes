@@ -264,7 +264,10 @@ export async function graph(path, { method = "GET", token, form, json } = {}) {
   try { data = await res.json(); } catch { /* sem corpo */ }
   if (!res.ok || data?.error) {
     const e = data?.error;
-    throw new Error(e ? `${e.message}${e.code ? " (código " + e.code + ")" : ""}` : `HTTP ${res.status}`);
+    if (!e) throw new Error(`HTTP ${res.status}`);
+    // A Meta coloca a explicação útil em error_user_title/error_user_msg e error_data.details
+    const extra = [e.error_user_title, e.error_user_msg, e.error_data?.details].filter(Boolean).join(" — ");
+    throw new Error(`${e.message}${e.code ? " (código " + e.code + (e.error_subcode ? "/" + e.error_subcode : "") + ")" : ""}${extra ? ": " + extra : ""}`);
   }
   return data;
 }

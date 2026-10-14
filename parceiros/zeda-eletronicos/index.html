@@ -403,7 +403,7 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
       <div class="item"><div class="ico"><svg><use href="#i-server"/></svg></div><h3>Equipamentos de TI</h3><p>Servidores, nobreaks, roteadores, switches e telefonia.</p></div>
       <div class="item"><div class="ico"><svg><use href="#i-tv"/></svg></div><h3>TVs e áudio</h3><p>Televisores, aparelhos de som, videogames e DVDs.</p></div>
     </div>
-    <p class="note"><b>Antes da coleta:</b> faça backup e apague seus dados pessoais dos aparelhos. Em computadores de empresas, informe no formulário se precisa de cuidado especial com HDs e SSDs.</p>
+    <p class="note"><b>Antes da coleta:</b> faça backup e apague seus dados pessoais dos aparelhos. Em computadores de empresas, avise pelo WhatsApp se precisa de cuidado especial com HDs e SSDs.</p>
     <div class="section-cta"><button class="btn btn-wa btn-lg" data-lead="itens"><svg><use href="#i-wa"/></svg>Quero descartar meus eletrônicos</button></div>
   </div>
 </section>
@@ -485,7 +485,7 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
     </div>
     <div class="biz-list">
       <div class="biz-item"><svg><use href="#i-truck"/></svg><div><b>Retirada no local</b><span>Equipamentos de escritório, parque de TI desativado, sobras de reforma e mudança.</span></div></div>
-      <div class="biz-item"><svg><use href="#i-doc"/></svg><div><b>Comprovante de destinação</b><span>Documentação da coleta para sua gestão ambiental e relatórios ESG. Informe no formulário que precisa.</span></div></div>
+      <div class="biz-item"><svg><use href="#i-doc"/></svg><div><b>Comprovante de destinação</b><span>Documentação da coleta para sua gestão ambiental e relatórios ESG. Peça pelo WhatsApp ao agendar.</span></div></div>
       <div class="biz-item"><svg><use href="#i-lock"/></svg><div><b>Atenção aos dados (LGPD)</b><span>Avise se há HDs e SSDs com informações sensíveis para combinarmos o tratamento adequado.</span></div></div>
       <div class="biz-item"><svg><use href="#i-recycle"/></svg><div><b>Coletas recorrentes</b><span>Programação mensal ou sob demanda, de acordo com o volume da empresa.</span></div></div>
     </div>
@@ -521,8 +521,8 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
       <details><summary>Quais bairros e cidades vocês atendem?</summary><p>Atendemos o Rio de Janeiro. Informe seu bairro ou cidade no formulário e confirmamos a disponibilidade pelo WhatsApp.</p></details>
       <details><summary>A coleta tem custo?</summary><p>Depende do tipo de item, da quantidade e do local. Preencha o formulário com essas informações e respondemos com as condições da sua coleta.</p></details>
       <details><summary>Existe quantidade mínima?</summary><p>Para residências, juntar alguns itens ajuda a viabilizar a coleta. Para condomínios e empresas, combinamos conforme o volume. Conte o que você tem e encontramos a melhor solução.</p></details>
-      <details><summary>Vocês emitem certificado de destinação para empresas?</summary><p>Empresas podem solicitar a documentação da coleta e da destinação. Marque essa opção no formulário para já recebermos o pedido.</p></details>
-      <details><summary>E os dados que estão nos meus aparelhos?</summary><p>Recomendamos fazer backup e apagar os dados antes da coleta (restauração de fábrica em celulares). Empresas com HDs e SSDs sensíveis devem avisar no formulário.</p></details>
+      <details><summary>Vocês emitem certificado de destinação para empresas?</summary><p>Empresas podem solicitar a documentação da coleta e da destinação. É só pedir pelo WhatsApp ao agendar a coleta.</p></details>
+      <details><summary>E os dados que estão nos meus aparelhos?</summary><p>Recomendamos fazer backup e apagar os dados antes da coleta (restauração de fábrica em celulares). Empresas com HDs e SSDs sensíveis devem avisar pelo WhatsApp.</p></details>
       <details><summary>Aparelhos quebrados ou muito antigos também são coletados?</summary><p>Sim. Funcionando ou não, novos ou antigos, os eletrônicos podem ser reciclados.</p></details>
       <details><summary>Vocês coletam outros materiais além de eletrônicos?</summary><p>Sim. Também coletamos óleo de cozinha usado, papel, plástico, metal e outros recicláveis. Dá para juntar tudo na mesma coleta.</p></details>
     </div>
@@ -641,13 +641,6 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
           <label class="opt"><input type="radio" name="prazo" value="Coleta recorrente"><span>🔁 Coleta recorrente</span></label>
           <label class="opt"><input type="radio" name="prazo" value="Só pesquisando"><span>🔎 Só pesquisando</span></label>
         </div>
-        <div class="biz-only hidden">
-          <p class="legend">Precisa de algum destes? <small style="font-weight:400;color:var(--muted)">(opcional)</small></p>
-          <div class="opts">
-            <label class="opt"><input type="checkbox" name="extras" value="Certificado / comprovante de destinação"><span>📄 Certificado / comprovante de destinação</span></label>
-            <label class="opt"><input type="checkbox" name="extras" value="Cuidado com dados (HDs/SSDs)"><span>🔒 Cuidado com dados (HDs/SSDs)</span></label>
-          </div>
-        </div>
         <p class="form-error" data-err="2" role="alert">Escolha a quantidade e o prazo.</p>
         <div class="mnav"><button type="button" class="btn back" data-back>←</button><button type="button" class="btn btn-wa" data-next>Continuar →</button></div>
       </div>
@@ -752,7 +745,6 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
     if (lead.itens) lines.push("*Itens:* " + lead.itens);
     if (lead.quantidade) lines.push("*Quantidade:* " + lead.quantidade);
     if (lead.prazo) lines.push("*Prazo:* " + lead.prazo);
-    if (lead.extras) lines.push("*Preciso de:* " + lead.extras);
     if (lead.mensagem) lines.push("*Detalhes:* " + lead.mensagem);
     lines.push("", "Posso enviar fotos dos itens se precisar.");
     var url = "https://wa.me/" + CFG.whatsapp + "?text=" + encodeURIComponent(lines.join("\n"));
@@ -838,7 +830,7 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
   $$("[data-back]", form).forEach(function (b) { b.addEventListener("click", function () { go(step - 1); }); });
   // Avança sozinho no passo 2 quando as duas respostas estiverem marcadas
   $$('input[name="prazo"]', form).forEach(function (r) {
-    r.addEventListener("change", function () { if (val("quantidade") && val("perfil") === "Residência") go(3); });
+    r.addEventListener("change", function () { if (val("quantidade")) go(3); });
   });
 
   function fieldCheck(scope, name, ok) {
@@ -865,8 +857,7 @@ div#zeda-lp-overlay{background:none;width:0;height:0}
       perfil: val("perfil"),
       itens: vals("itens"),
       quantidade: val("quantidade"),
-      prazo: val("prazo"),
-      extras: val("perfil") !== "Residência" ? vals("extras") : ""
+      prazo: val("prazo")
     });
   });
 

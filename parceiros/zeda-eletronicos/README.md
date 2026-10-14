@@ -36,7 +36,7 @@ Para trocar, substitua o `src` da `<img>` (o ideal é usar fotos reais da equipe
 ## Fluxo de conversão
 Todo CTA de WhatsApp abre um popup de qualificação em 3 passos:
 1. Perfil (casa / condomínio / empresa / escola-órgão) + itens a descartar
-2. Quantidade + prazo (+ certificado de destinação e cuidado com dados, para empresas)
+2. Quantidade + prazo
 3. Nome, WhatsApp e bairro/cidade (+ empresa)
 
 Ao enviar, o lead vai para o `leadEndpoint` (se houver) e o visitante cai no WhatsApp com a mensagem já preenchida.

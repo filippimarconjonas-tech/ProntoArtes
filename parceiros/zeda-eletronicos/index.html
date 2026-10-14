@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coleta de Lixo Eletrônico no Rio | Zé da Reciclagem</title>
+<meta name="description" content="Coleta de lixo eletrônico no Rio de Janeiro para casas, condomínios e empresas. Computadores, notebooks, celulares, monitores, cabos e baterias com destinação correta. Agende pelo WhatsApp.">
+<meta name="theme-color" content="#0f7a3d">
+<meta property="og:title" content="Coleta de Lixo Eletrônico no Rio | Zé da Reciclagem">
+<meta property="og:description" content="Seus eletrônicos coletados no seu endereço e enviados para reciclagem correta. Agende pelo WhatsApp.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<script>
+/* ==================================================================
+   CONFIGURAÇÕES EDITÁVEIS
+   ================================================================== */
+window.ZEDA_CONFIG = {
+  // WhatsApp que recebe os leads (DDI + DDD + número, só dígitos)
+  whatsapp: "5521990380320",
+
+  // URL que recebe cada lead em JSON antes de abrir o WhatsApp
+  // (planilha, CRM, Make/Zapier, n8n…). Deixe "" para só abrir o WhatsApp.
+  leadEndpoint: "",
+
+  // Popup de saída (desktop): abre uma vez por sessão quando o mouse sai da página
+  exitIntent: true
+};
+</script>
+
+<!-- Cole aqui o Google Tag Manager / Meta Pixel. A página já envia os eventos
+     "lead_form_open", "lead_step" e "generate_lead" para o dataLayer e fbq. -->
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "Zé da Reciclagem",
+  "description": "Coleta de lixo eletrônico e recicláveis no Rio de Janeiro para residências, condomínios e empresas.",
+  "url": "https://zedareciclagem.com.br/",
+  "telephone": "+55-21-99038-0320",
+  "areaServed": { "@type": "City", "name": "Rio de Janeiro" },
+  "address": { "@type": "PostalAddress", "addressLocality": "Rio de Janeiro", "addressRegion": "RJ", "addressCountry": "BR" }
+}
+</script>
+
+<style>
+:root{
+  --green:#0f7a3d; --green-d:#0a5a2c; --green-l:#e8f5ec; --lime:#9be15d;
+  --ink:#122018; --muted:#536359; --line:#dfe7e1; --bg:#ffffff; --bg2:#f5f8f6;
+  --wa:#25d366; --wa-d:#1aa851; --warn:#b54708;
+  --r:14px; --shadow:0 10px 30px rgba(10,40,20,.10);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.55;-webkit-font-smoothing:antialiased}
+img,svg{display:block;max-width:100%}
+a{color:inherit}
+h1,h2,h3{line-height:1.15;margin:0 0 .5em;letter-spacing:-.02em}
+h1{font-size:clamp(2rem,5vw,3.3rem);font-weight:800}
+h2{font-size:clamp(1.6rem,3.4vw,2.3rem);font-weight:800}
+h3{font-size:1.1rem;font-weight:700}
+p{margin:0 0 1em}
+.wrap{width:min(1140px,100% - 32px);margin-inline:auto}
+section{padding:72px 0}
+.alt{background:var(--bg2)}
+.eyebrow{display:inline-block;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:10px}
+.lead{font-size:1.12rem;color:var(--muted);max-width:640px}
+.center{text-align:center}.center .lead{margin-inline:auto}
+
+/* Botões */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:0;cursor:pointer;font:inherit;font-weight:700;border-radius:999px;padding:16px 26px;text-decoration:none;transition:transform .15s,background .15s,box-shadow .15s}
+.btn:active{transform:scale(.98)}
+.btn-wa{background:var(--wa);color:#06381b;box-shadow:0 8px 22px rgba(37,211,102,.35)}
+.btn-wa:hover{background:var(--wa-d);color:#fff}
+.btn-ghost{background:transparent;color:var(--green);border:2px solid var(--green)}
+.btn-ghost:hover{background:var(--green-l)}
+.btn-lg{font-size:1.08rem;padding:18px 30px}
+.btn-block{width:100%}
+.btn svg{width:22px;height:22px;flex:none}
+
+/* Topo */
+.top{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.15rem;text-decoration:none}
+.logo-mark{width:38px;height:38px;border-radius:10px;background:var(--green);display:grid;place-items:center;color:#fff}
+.logo small{display:block;font-size:.7rem;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.top nav{display:flex;gap:22px;font-size:.93rem;font-weight:600}
+.top nav a{text-decoration:none;color:var(--muted)}.top nav a:hover{color:var(--green)}
+.top .btn{padding:11px 18px;font-size:.92rem}
+@media(max-width:860px){.top nav{display:none}}
+@media(max-width:420px){.top .btn span{display:none}.top .btn{padding:11px}}
+
+/* Hero */
+.hero{padding:56px 0 64px;background:radial-gradient(1000px 500px at 85% -10%,#d9f2e1 0,transparent 60%),linear-gradient(180deg,#f3faf5,#fff)}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center}
+.hero h1 em{font-style:normal;color:var(--green)}
+.hero-ctas{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0 22px}
+.checks{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.checks li{display:flex;gap:10px;align-items:flex-start;font-weight:500}
+.checks svg{width:22px;height:22px;color:var(--green);flex:none;margin-top:1px}
+.hero-card{background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:26px}
+.hero-card h3{font-size:1.2rem}
+.hero-card .muted{color:var(--muted);font-size:.95rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 20px}
+.chip{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:9px 14px;font:inherit;font-size:.92rem;font-weight:600;cursor:pointer;transition:.15s}
+.chip:hover,.chip.on{border-color:var(--green);background:var(--green-l);color:var(--green-d)}
+.trustbar{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:18px;font-size:.85rem;color:var(--muted)}
+.trustbar span{display:flex;align-items:center;gap:6px}
+.trustbar svg{width:16px;height:16px;color:var(--green)}
+@media(max-width:900px){.hero .wrap{grid-template-columns:1fr;gap:32px}}
+
+/* Grade de itens */
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr}}
+@media(max-width:640px){.g2{grid-template-columns:1fr}}
+.item{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:8px;transition:.15s}
+.item:hover{border-color:var(--green);box-shadow:var(--shadow)}
+.ico{width:46px;height:46px;border-radius:12px;background:var(--green-l);color:var(--green);display:grid;place-items:center}
+.ico svg{width:26px;height:26px}
+.item p{color:var(--muted);font-size:.93rem;margin:0}
+.note{margin-top:22px;padding:16px 18px;border-radius:var(--r);background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;font-size:.93rem}
+.section-cta{margin-top:32px;display:flex;justify-content:center}
+
+/* Público */
+.aud{background:#fff;border:1px solid var(--line);border-radius:20px;padding:28px;display:flex;flex-direction:column}
+.aud .tag{align-self:flex-start;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--green-l);color:var(--green-d);padding:5px 10px;border-radius:999px;margin-bottom:12px}
+.aud ul{padding-left:0;list-style:none;margin:6px 0 22px;display:grid;gap:8px;flex:1}
+.aud li{display:flex;gap:8px;color:var(--muted);font-size:.95rem}
+.aud li::before{content:"✓";color:var(--green);font-weight:800}
+.aud.featured{border:2px solid var(--green);box-shadow:var(--shadow)}
+
+/* Passos */
+.steps{counter-reset:s}
+.step{position:relative;padding:26px 22px 22px;background:#fff;border:1px solid var(--line);border-radius:var(--r)}
+.step::before{counter-increment:s;content:counter(s);position:absolute;top:-16px;left:22px;width:34px;height:34px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;display:grid;place-items:center}
+.step p{color:var(--muted);margin:0;font-size:.95rem}
+
+/* Empresas */
+.biz{background:linear-gradient(135deg,#0a5a2c,#0f7a3d);color:#eaf7ef}
+.biz .eyebrow{color:var(--lime)}
+.biz .lead{color:#cfe9d8}
+.biz .wrap{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.biz-list{display:grid;gap:14px}
+.biz-item{display:flex;gap:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:var(--r);padding:16px}
+.biz-item svg{width:26px;height:26px;color:var(--lime);flex:none}
+.biz-item b{display:block;color:#fff}
+.biz-item span{font-size:.92rem;color:#cfe9d8}
+@media(max-width:900px){.biz .wrap{grid-template-columns:1fr}}
+
+/* Impacto */
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:28px}
+.fact{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.fact b{display:block;font-size:1.05rem;margin-bottom:4px}
+.fact p{margin:0;color:var(--muted);font-size:.93rem}
+@media(max-width:800px){.facts{grid-template-columns:1fr}}
+
+/* FAQ */
+.faq{max-width:820px;margin:28px auto 0}
+.faq details{border-bottom:1px solid var(--line);padding:4px 0}
+.faq summary{cursor:pointer;list-style:none;padding:16px 36px 16px 0;font-weight:700;position:relative}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";position:absolute;right:4px;top:12px;font-size:1.5rem;color:var(--green);font-weight:500}
+.faq details[open] summary::after{content:"–"}
+.faq details p{color:var(--muted);margin:0 0 16px}
+
+/* Formulários */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label,.legend{font-weight:600;font-size:.92rem}
+.field input,.field select,.field textarea{font:inherit;padding:13px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);width:100%}
+.field textarea{min-height:90px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(15,122,61,.15)}
+.field.err input,.field.err select{border-color:#d92d20}
+.field .msg{color:#d92d20;font-size:.82rem;display:none}
+.field.err .msg{display:block}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.row2{grid-template-columns:1fr}}
+.opts{display:grid;gap:8px;margin:8px 0 14px}
+.opts.cols2{grid-template-columns:1fr 1fr}
+@media(max-width:480px){.opts.cols2{grid-template-columns:1fr}}
+.opt{position:relative}
+.opt input{position:absolute;opacity:0;pointer-events:none}
+.opt span{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;font-weight:500;font-size:.95rem;transition:.12s;background:#fff}
+.opt span::before{content:"";width:18px;height:18px;border:2px solid #b8c6bd;border-radius:50%;flex:none}
+.opt input[type=checkbox]+span::before{border-radius:5px}
+.opt input:checked+span{border-color:var(--green);background:var(--green-l)}
+.opt input:checked+span::before{background:var(--green);border-color:var(--green);box-shadow:inset 0 0 0 3px #fff}
+.opt input:focus-visible+span{outline:3px solid rgba(15,122,61,.35)}
+.consent{display:flex;gap:10px;align-items:flex-start;font-size:.82rem;color:var(--muted);margin:4px 0 14px}
+.consent input{margin-top:3px;accent-color:var(--green)}
+.form-error{color:#d92d20;font-size:.88rem;margin:-4px 0 12px;display:none}
+.form-error.show{display:block}
+.secure{display:flex;align-items:center;justify-content:center;gap:6px;font-size:.8rem;color:var(--muted);margin-top:10px}
+.secure svg{width:14px;height:14px}
+
+/* Modal */
+.modal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(8,25,15,.6)}
+.modal.open{display:flex;animation:fade .2s}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal-box{position:relative;background:#fff;border-radius:20px;width:min(520px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:28px 26px 24px;box-shadow:0 30px 80px rgba(0,0,0,.3)}
+.modal-x{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:0;background:var(--bg2);cursor:pointer;font-size:1.3rem;line-height:1;color:var(--muted)}
+.modal-head{display:flex;gap:12px;align-items:center;margin-bottom:6px;padding-right:30px}
+.modal-head .ico{background:var(--wa);color:#fff;width:42px;height:42px}
+.modal-head h3{margin:0;font-size:1.15rem}
+.modal-sub{color:var(--muted);font-size:.92rem;margin-bottom:14px}
+.progress{height:6px;background:var(--bg2);border-radius:99px;overflow:hidden;margin:6px 0 18px}
+.progress i{display:block;height:100%;width:33%;background:var(--green);transition:width .3s}
+.mstep{display:none}.mstep.on{display:block;animation:fade .2s}
+.mnav{display:flex;gap:10px;margin-top:6px}
+.mnav .btn{flex:1}
+.mnav .back{flex:0 0 auto;background:var(--bg2);color:var(--muted)}
+.hint{font-size:.85rem;color:var(--muted);margin:-6px 0 12px}
+.hidden{display:none!important}
+
+/* Rodapé + formulário */
+.foot-form{background:var(--ink);color:#e6efe9}
+.foot-form .wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:start}
+.foot-form h2{color:#fff}
+.foot-form .lead{color:#b9c9bf}
+.foot-form .card{background:#fff;color:var(--ink);border-radius:20px;padding:28px}
+.contact{list-style:none;padding:0;margin:24px 0 0;display:grid;gap:12px}
+.contact li{display:flex;gap:10px;align-items:center}
+.contact svg{width:20px;height:20px;color:var(--lime)}
+.contact a{text-decoration:none}
+@media(max-width:900px){.foot-form .wrap{grid-template-columns:1fr}}
+footer{background:#0b140f;color:#8fa298;font-size:.85rem;padding:22px 0 90px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
+@media(min-width:768px){footer{padding-bottom:22px}}
+
+/* Flutuantes */
+.wa-float{position:fixed;right:20px;bottom:20px;z-index:50;width:62px;height:62px;border-radius:50%;background:var(--wa);color:#fff;border:0;cursor:pointer;display:grid;place-items:center;box-shadow:0 10px 25px rgba(37,211,102,.45);animation:pulse 2.4s infinite}
+.wa-float svg{width:32px;height:32px}
+.wa-float .bubble{position:absolute;right:74px;white-space:nowrap;background:#fff;color:var(--ink);font-weight:600;font-size:.88rem;padding:8px 12px;border-radius:10px;box-shadow:var(--shadow)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(37,211,102,.5)}70%{box-shadow:0 0 0 16px rgba(37,211,102,0)}100%{box-shadow:0 0 0 0 rgba(37,211,102,0)}}
+.mbar{display:none}
+@media(max-width:767px){
+  .wa-float{display:none}
+  .mbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line);box-shadow:0 -6px 20px rgba(0,0,0,.08)}
+  .mbar .btn{width:100%;padding:15px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<!-- Ícones reutilizáveis -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-wa" viewBox="0 0 24 24"><path fill="currentColor" d="M17.5 14.4c-.3-.1-1.8-.9-2-1s-.5-.1-.7.1-.8 1-.9 1.2-.3.2-.6.1a8.2 8.2 0 0 1-4.1-3.6c-.3-.5.3-.5.9-1.6.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6a1.1 1.1 0 0 0-.8.4 3.4 3.4 0 0 0-1.1 2.5 5.9 5.9 0 0 0 1.2 3.1 13.5 13.5 0 0 0 5.2 4.6c1.9.8 2.7.9 3.6.7a3.1 3.1 0 0 0 2-1.4 2.5 2.5 0 0 0 .2-1.4c-.1-.1-.3-.2-.6-.4ZM12 21.8a9.8 9.8 0 0 1-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4A9.8 9.8 0 1 1 12 21.8Zm8.4-18.2A11.8 11.8 0 0 0 1.8 17.8L.2 23.8l6.1-1.6a11.8 11.8 0 0 0 5.7 1.4A11.8 11.8 0 0 0 20.4 3.6Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-recycle" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 19H4.8a1.8 1.8 0 0 1-1.6-2.7l1.2-2.1M11 19h8.2a1.8 1.8 0 0 0 1.6-2.7l-1.2-2.1M14 16l-3 3 3 3M8.3 5.3l1.1-1.9a1.8 1.8 0 0 1 3.2 0l4.1 7.1M13.4 10.4l3.6.9.9-3.6M2 12.5l2.7-4.6"/><path d="m2 8.2 2.7.4.4-2.7"/></g></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm-3-10 2 2 4-4"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.6a1 1 0 0 0-.2-.6l-3.5-4.4A1 1 0 0 0 17.5 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></g></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></g></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></g></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></g></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></g></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></g></symbol>
+  <symbol id="i-printer" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></g></symbol>
+  <symbol id="i-cable" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1v2M19 15V6.5a3.5 3.5 0 0 0-7 0v11a3.5 3.5 0 0 1-7 0V9M21 21v-2h-4M3 5V3M7 5V3"/><path d="M3 5h4v2a2 2 0 0 1-4 0z"/></g></symbol>
+  <symbol id="i-battery" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2M6 11v2M10 11v2"/></g></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></g></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/></g></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></g></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></g></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10Z"/><path d="M2 21c0-3 1.9-5.4 5.1-6"/></g></symbol>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <a href="#inicio" class="logo" aria-label="Zé da Reciclagem — início">
+      <span class="logo-mark"><svg width="22" height="22"><use href="#i-recycle"/></svg></span>
+      <span>Zé da Reciclagem<small>Coleta de eletrônicos · Rio de Janeiro</small></span>
+    </a>
+    <nav aria-label="Seções">
+      <a href="#itens">O que coletamos</a>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#empresas">Empresas</a>
+      <a href="#duvidas">Dúvidas</a>
+    </nav>
+    <button class="btn btn-wa" data-lead="topo"><svg><use href="#i-wa"/></svg><span>Agendar coleta</span></button>
+  </div>
+</header>
+
+<main id="inicio">
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">Coleta de lixo eletrônico no Rio</span>
+      <h1>Seus eletrônicos velhos <em>saem de casa</em> e vão para o lugar certo.</h1>
+      <p class="lead">Buscamos computadores, notebooks, celulares, monitores, impressoras, cabos e baterias no seu endereço, em residências, condomínios e empresas, e enviamos tudo para reciclagem com destinação correta.</p>
+      <div class="hero-ctas">
+        <button class="btn btn-wa btn-lg" data-lead="hero"><svg><use href="#i-wa"/></svg>Agendar coleta pelo WhatsApp</button>
+        <a class="btn btn-ghost btn-lg" href="#itens">Ver o que coletamos</a>
+      </div>
+      <ul class="checks">
+        <li><svg><use href="#i-check"/></svg>Coleta no seu endereço, sem você sair de casa ou do escritório</li>
+        <li><svg><use href="#i-check"/></svg>Envio para recicladores parceiros e centrais de tratamento autorizadas</li>
+        <li><svg><use href="#i-check"/></svg>Atendimento rápido pelo WhatsApp</li>
+      </ul>
+    </div>
+
+    <!-- Microconversão: escolha rápida que já abre o popup com o perfil marcado -->
+    <div class="hero-card">
+      <h3>Monte sua coleta em 30 segundos</h3>
+      <p class="muted">Quem vai descartar?</p>
+      <div class="chips" role="group" aria-label="Tipo de cliente">
+        <button class="chip" data-lead="hero-card" data-perfil="Residência">🏠 Minha casa</button>
+        <button class="chip" data-lead="hero-card" data-perfil="Condomínio">🏢 Condomínio</button>
+        <button class="chip" data-lead="hero-card" data-perfil="Empresa">💼 Empresa</button>
+        <button class="chip" data-lead="hero-card" data-perfil="Órgão público / escola">🏛️ Escola / órgão público</button>
+      </div>
+      <button class="btn btn-wa btn-block" data-lead="hero-card"><svg><use href="#i-wa"/></svg>Continuar no WhatsApp</button>
+      <div class="trustbar">
+        <span><svg><use href="#i-pin"/></svg>Rio de Janeiro</span>
+        <span><svg><use href="#i-shield"/></svg>Destinação correta</span>
+        <span><svg><use href="#i-truck"/></svg>Coleta no local</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- O QUE COLETAMOS -->
+<section id="itens">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">O que coletamos</span>
+      <h2>Do celular parado na gaveta ao servidor da empresa</h2>
+      <p class="lead">Se liga na tomada ou funciona com bateria, provavelmente a gente leva. Na dúvida, mande uma foto no WhatsApp.</p>
+    </div>
+    <div class="grid g4" style="margin-top:32px">
+      <div class="item"><div class="ico"><svg><use href="#i-laptop"/></svg></div><h3>Computadores e notebooks</h3><p>Desktops, gabinetes, notebooks, placas, HDs e memórias.</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-phone"/></svg></div><h3>Celulares e tablets</h3><p>Smartphones, aparelhos antigos, tablets e carregadores.</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-monitor"/></svg></div><h3>Monitores</h3><p>Monitores LCD, LED e de tubo (CRT).</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-printer"/></svg></div><h3>Impressoras</h3><p>Impressoras, scanners, multifuncionais e periféricos.</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-cable"/></svg></div><h3>Cabos, teclados e mouses</h3><p>Fios, cabos, fontes, teclados, mouses e acessórios.</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-battery"/></svg></div><h3>Pilhas e baterias</h3><p>Pilhas, baterias de celular, notebook e nobreak.</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-server"/></svg></div><h3>Equipamentos de TI</h3><p>Servidores, nobreaks, roteadores, switches e telefonia.</p></div>
+      <div class="item"><div class="ico"><svg><use href="#i-tv"/></svg></div><h3>TVs e áudio</h3><p>Televisores, aparelhos de som, videogames e DVDs.</p></div>
+    </div>
+    <p class="note"><b>Antes da coleta:</b> faça backup e apague seus dados pessoais dos aparelhos. Em computadores de empresas, informe no formulário se precisa de cuidado especial com HDs e SSDs.</p>
+    <div class="section-cta"><button class="btn btn-wa btn-lg" data-lead="itens"><svg><use href="#i-wa"/></svg>Quero descartar meus eletrônicos</button></div>
+  </div>
+</section>
+
+<!-- PARA QUEM -->
+<section class="alt" id="para-quem">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">Para quem é</span>
+      <h2>Uma coleta para cada necessidade</h2>
+    </div>
+    <div class="grid g3" style="margin-top:32px">
+      <div class="aud">
+        <span class="tag">Residências</span>
+        <h3>Para a sua casa</h3>
+        <ul>
+          <li>Libere espaço do armário, da garagem e da gaveta</li>
+          <li>Sem precisar procurar ponto de entrega</li>
+          <li>Pode juntar com óleo usado e outros recicláveis</li>
+        </ul>
+        <button class="btn btn-ghost btn-block" data-lead="para-quem" data-perfil="Residência">Agendar para minha casa</button>
+      </div>
+      <div class="aud featured">
+        <span class="tag">Condomínios</span>
+        <h3>Para condomínios</h3>
+        <ul>
+          <li>Coleta para todos os moradores no mesmo dia</li>
+          <li>Ideal para campanhas e mutirões de descarte</li>
+          <li>Recolhimento de eletrônicos, pilhas, baterias e óleo</li>
+        </ul>
+        <button class="btn btn-wa btn-block" data-lead="para-quem" data-perfil="Condomínio"><svg><use href="#i-wa"/></svg>Agendar para o condomínio</button>
+      </div>
+      <div class="aud">
+        <span class="tag">Empresas</span>
+        <h3>Para empresas</h3>
+        <ul>
+          <li>Retirada de computadores, teclados, cabos e equipamentos de TI</li>
+          <li>Atendimento para grandes volumes e coletas recorrentes</li>
+          <li>Comprovação da destinação para a sua gestão ambiental</li>
+        </ul>
+        <button class="btn btn-ghost btn-block" data-lead="para-quem" data-perfil="Empresa">Solicitar coleta empresarial</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMO FUNCIONA -->
+<section id="como-funciona">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">Como funciona</span>
+      <h2>Agendar leva menos de 1 minuto</h2>
+    </div>
+    <div class="grid g4 steps" style="margin-top:40px">
+      <div class="step"><h3>Conte o que tem</h3><p>Responda 3 perguntas rápidas: quem é você, o que vai descartar e a quantidade.</p></div>
+      <div class="step"><h3>Fale no WhatsApp</h3><p>Suas respostas chegam prontas no WhatsApp. Se quiser, mande fotos dos itens.</p></div>
+      <div class="step"><h3>Coleta no local</h3><p>Combinamos dia e horário e buscamos tudo no seu endereço.</p></div>
+      <div class="step"><h3>Destinação correta</h3><p>Os itens seguem para recicladores parceiros e centrais de tratamento autorizadas.</p></div>
+    </div>
+    <div class="section-cta"><button class="btn btn-wa btn-lg" data-lead="como-funciona"><svg><use href="#i-wa"/></svg>Começar agora</button></div>
+  </div>
+</section>
+
+<!-- EMPRESAS -->
+<section class="biz" id="empresas">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow">Para empresas, escolas e órgãos públicos</span>
+      <h2>Descarte de TI sem dor de cabeça e dentro da lei</h2>
+      <p class="lead">A Política Nacional de Resíduos Sólidos (Lei 12.305/2010) exige destinação ambientalmente adequada para resíduos eletroeletrônicos. Cuidamos da retirada para que sua empresa fique em dia.</p>
+      <button class="btn btn-wa btn-lg" data-lead="empresas" data-perfil="Empresa" style="margin-top:12px"><svg><use href="#i-wa"/></svg>Pedir orçamento de coleta</button>
+    </div>
+    <div class="biz-list">
+      <div class="biz-item"><svg><use href="#i-truck"/></svg><div><b>Retirada no local</b><span>Equipamentos de escritório, parque de TI desativado, sobras de reforma e mudança.</span></div></div>
+      <div class="biz-item"><svg><use href="#i-doc"/></svg><div><b>Comprovante de destinação</b><span>Documentação da coleta para sua gestão ambiental e relatórios ESG. Informe no formulário que precisa.</span></div></div>
+      <div class="biz-item"><svg><use href="#i-lock"/></svg><div><b>Atenção aos dados (LGPD)</b><span>Avise se há HDs e SSDs com informações sensíveis para combinarmos o tratamento adequado.</span></div></div>
+      <div class="biz-item"><svg><use href="#i-recycle"/></svg><div><b>Coletas recorrentes</b><span>Programação mensal ou sob demanda, de acordo com o volume da empresa.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- POR QUE RECICLAR -->
+<section class="alt">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">Por que não jogar no lixo comum</span>
+      <h2>Eletrônico no lixo comum vira problema</h2>
+    </div>
+    <div class="facts">
+      <div class="fact"><svg width="28" height="28" style="color:var(--green);margin-bottom:10px"><use href="#i-leaf"/></svg><b>Contamina solo e água</b><p>Baterias e placas têm metais pesados, como chumbo e mercúrio, que vazam quando descartados de forma errada.</p></div>
+      <div class="fact"><svg width="28" height="28" style="color:var(--green);margin-bottom:10px"><use href="#i-recycle"/></svg><b>Materiais voltam para a indústria</b><p>Cobre, alumínio, plásticos e metais preciosos podem ser recuperados e reaproveitados.</p></div>
+      <div class="fact"><svg width="28" height="28" style="color:var(--green);margin-bottom:10px"><use href="#i-building"/></svg><b>É responsabilidade de todos</b><p>A lei não permite descartar eletrônicos junto com o lixo doméstico. A coleta resolve isso por você.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="duvidas">
+  <div class="wrap">
+    <div class="center">
+      <span class="eyebrow">Dúvidas frequentes</span>
+      <h2>Perguntas que recebemos todo dia</h2>
+    </div>
+    <div class="faq">
+      <details><summary>Quais bairros e cidades vocês atendem?</summary><p>Atendemos o Rio de Janeiro. Informe seu bairro ou cidade no formulário e confirmamos a disponibilidade pelo WhatsApp.</p></details>
+      <details><summary>A coleta tem custo?</summary><p>Depende do tipo de item, da quantidade e do local. Preencha o formulário com essas informações e respondemos com as condições da sua coleta.</p></details>
+      <details><summary>Existe quantidade mínima?</summary><p>Para residências, juntar alguns itens ajuda a viabilizar a coleta. Para condomínios e empresas, combinamos conforme o volume. Conte o que você tem e encontramos a melhor solução.</p></details>
+      <details><summary>Vocês emitem certificado de destinação para empresas?</summary><p>Empresas podem solicitar a documentação da coleta e da destinação. Marque essa opção no formulário para já recebermos o pedido.</p></details>
+      <details><summary>E os dados que estão nos meus aparelhos?</summary><p>Recomendamos fazer backup e apagar os dados antes da coleta (restauração de fábrica em celulares). Empresas com HDs e SSDs sensíveis devem avisar no formulário.</p></details>
+      <details><summary>Aparelhos quebrados ou muito antigos também são coletados?</summary><p>Sim. Funcionando ou não, novos ou antigos, os eletrônicos podem ser reciclados.</p></details>
+      <details><summary>Vocês coletam outros materiais além de eletrônicos?</summary><p>Sim. Também coletamos óleo de cozinha usado, papel, plástico, metal e outros recicláveis. Dá para juntar tudo na mesma coleta.</p></details>
+    </div>
+    <div class="section-cta"><button class="btn btn-wa btn-lg" data-lead="faq"><svg><use href="#i-wa"/></svg>Tirar minha dúvida no WhatsApp</button></div>
+  </div>
+</section>
+
+<!-- RODAPÉ COM FORMULÁRIO -->
+<section class="foot-form" id="contato">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow" style="color:var(--lime)">Solicite sua coleta</span>
+      <h2>Prefere deixar seus dados?</h2>
+      <p class="lead">Preencha o formulário e continue a conversa no WhatsApp com tudo já explicado. Sem precisar repetir nada.</p>
+      <ul class="contact">
+        <li><svg><use href="#i-wa"/></svg><button class="btn-link" data-lead="rodape-contato" style="all:unset;cursor:pointer">(21) 99038-0320</button></li>
+        <li><svg><use href="#i-pin"/></svg>Rio de Janeiro · RJ</li>
+        <li><svg><use href="#i-recycle"/></svg><a href="https://zedareciclagem.com.br/" target="_blank" rel="noopener">zedareciclagem.com.br</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <form id="footForm" novalidate>
+        <div class="row2">
+          <div class="field"><label for="f-nome">Nome *</label><input id="f-nome" name="nome" autocomplete="name" required><span class="msg">Informe seu nome</span></div>
+          <div class="field"><label for="f-tel">WhatsApp *</label><input id="f-tel" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" placeholder="(21) 90000-0000" required><span class="msg">WhatsApp inválido</span></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="f-perfil">Você é *</label>
+            <select id="f-perfil" name="perfil" required>
+              <option value="">Selecione</option>
+              <option>Residência</option><option>Condomínio</option><option>Empresa</option><option>Órgão público / escola</option>
+            </select><span class="msg">Selecione uma opção</span></div>
+          <div class="field"><label for="f-bairro">Bairro / cidade *</label><input id="f-bairro" name="bairro" autocomplete="address-level2" placeholder="Ex.: Tijuca, Niterói" required><span class="msg">Informe o bairro ou a cidade</span></div>
+        </div>
+        <div class="field biz-only hidden"><label for="f-empresa">Empresa / condomínio</label><input id="f-empresa" name="empresa" autocomplete="organization"></div>
+        <div class="field"><label for="f-qtd">Quantidade aproximada *</label>
+          <select id="f-qtd" name="quantidade" required>
+            <option value="">Selecione</option>
+            <option>Poucos itens (cabe numa caixa)</option>
+            <option>Várias caixas / um porta-malas</option>
+            <option>Grande volume (pallets, caminhão)</option>
+            <option>Não sei avaliar</option>
+          </select><span class="msg">Selecione uma opção</span></div>
+        <div class="field"><label for="f-msg">O que você quer descartar?</label><textarea id="f-msg" name="mensagem" placeholder="Ex.: 3 notebooks, 2 monitores, cabos e uma impressora"></textarea></div>
+        <label class="consent"><input type="checkbox" name="lgpd" required> <span>Autorizo o contato pelo WhatsApp para tratar da coleta. Meus dados não serão compartilhados.</span></label>
+        <p class="form-error" role="alert">Aceite o contato pelo WhatsApp para continuar.</p>
+        <button class="btn btn-wa btn-lg btn-block" type="submit"><svg><use href="#i-wa"/></svg>Enviar e continuar no WhatsApp</button>
+        <p class="secure"><svg><use href="#i-lock"/></svg>Seus dados estão protegidos</p>
+      </form>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="ano"></span> Zé da Reciclagem · Coleta de lixo eletrônico no Rio de Janeiro</span>
+    <span>Descarte consciente · Lei 12.305/2010</span>
+  </div>
+</footer>
+
+<!-- Flutuantes -->
+<button class="wa-float" data-lead="flutuante" aria-label="Agendar coleta pelo WhatsApp"><span class="bubble">Agende sua coleta</span><svg><use href="#i-wa"/></svg></button>
+<div class="mbar"><button class="btn btn-wa" data-lead="barra-mobile"><svg><use href="#i-wa"/></svg>Agendar coleta pelo WhatsApp</button></div>
+
+<!-- POPUP DE QUALIFICAÇÃO -->
+<div class="modal" id="leadModal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="modal-box">
+    <button class="modal-x" type="button" aria-label="Fechar">×</button>
+    <div class="modal-head">
+      <div class="ico"><svg><use href="#i-wa"/></svg></div>
+      <div><h3 id="mTitle">Agende sua coleta</h3></div>
+    </div>
+    <p class="modal-sub" id="mSub">Responda rapidinho e continue no WhatsApp com tudo explicado.</p>
+    <div class="progress" aria-hidden="true"><i></i></div>
+
+    <form id="leadForm" novalidate>
+      <!-- Passo 1 -->
+      <div class="mstep on" data-step="1">
+        <p class="legend">1. Para quem é a coleta?</p>
+        <div class="opts cols2">
+          <label class="opt"><input type="radio" name="perfil" value="Residência"><span>🏠 Minha casa</span></label>
+          <label class="opt"><input type="radio" name="perfil" value="Condomínio"><span>🏢 Condomínio</span></label>
+          <label class="opt"><input type="radio" name="perfil" value="Empresa"><span>💼 Empresa</span></label>
+          <label class="opt"><input type="radio" name="perfil" value="Órgão público / escola"><span>🏛️ Escola / órgão</span></label>
+        </div>
+        <p class="legend">2. O que você quer descartar? <small style="font-weight:400;color:var(--muted)">(marque todos)</small></p>
+        <div class="opts cols2">
+          <label class="opt"><input type="checkbox" name="itens" value="Computadores / notebooks"><span>Computadores / notebooks</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Celulares / tablets"><span>Celulares / tablets</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Monitores / TVs"><span>Monitores / TVs</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Impressoras / periféricos"><span>Impressoras / periféricos</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Cabos / teclados / mouses"><span>Cabos / teclados / mouses</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Pilhas / baterias"><span>Pilhas / baterias</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Servidores / nobreaks / rede"><span>Servidores / nobreaks</span></label>
+          <label class="opt"><input type="checkbox" name="itens" value="Outros"><span>Outros</span></label>
+        </div>
+        <p class="form-error" data-err="1" role="alert">Escolha para quem é a coleta e pelo menos um item.</p>
+        <div class="mnav"><button type="button" class="btn btn-wa" data-next>Continuar →</button></div>
+      </div>
+
+      <!-- Passo 2 -->
+      <div class="mstep" data-step="2">
+        <p class="legend">3. Qual a quantidade aproximada?</p>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="quantidade" value="Poucos itens (cabe numa caixa)"><span>📦 Poucos itens (cabe numa caixa)</span></label>
+          <label class="opt"><input type="radio" name="quantidade" value="Várias caixas / um porta-malas"><span>🚗 Várias caixas / um porta-malas</span></label>
+          <label class="opt"><input type="radio" name="quantidade" value="Grande volume (pallets, caminhão)"><span>🚚 Grande volume (pallets, caminhão)</span></label>
+        </div>
+        <p class="legend">4. Para quando?</p>
+        <div class="opts cols2">
+          <label class="opt"><input type="radio" name="prazo" value="Esta semana"><span>⚡ Esta semana</span></label>
+          <label class="opt"><input type="radio" name="prazo" value="Este mês"><span>📅 Este mês</span></label>
+          <label class="opt"><input type="radio" name="prazo" value="Coleta recorrente"><span>🔁 Coleta recorrente</span></label>
+          <label class="opt"><input type="radio" name="prazo" value="Só pesquisando"><span>🔎 Só pesquisando</span></label>
+        </div>
+        <div class="biz-only hidden">
+          <p class="legend">Precisa de algum destes? <small style="font-weight:400;color:var(--muted)">(opcional)</small></p>
+          <div class="opts">
+            <label class="opt"><input type="checkbox" name="extras" value="Certificado / comprovante de destinação"><span>📄 Certificado / comprovante de destinação</span></label>
+            <label class="opt"><input type="checkbox" name="extras" value="Cuidado com dados (HDs/SSDs)"><span>🔒 Cuidado com dados (HDs/SSDs)</span></label>
+          </div>
+        </div>
+        <p class="form-error" data-err="2" role="alert">Escolha a quantidade e o prazo.</p>
+        <div class="mnav"><button type="button" class="btn back" data-back>←</button><button type="button" class="btn btn-wa" data-next>Continuar →</button></div>
+      </div>
+
+      <!-- Passo 3 -->
+      <div class="mstep" data-step="3">
+        <p class="legend">Última etapa: para onde enviamos a confirmação?</p>
+        <div class="field"><label for="m-nome">Seu nome *</label><input id="m-nome" name="nome" autocomplete="name" required><span class="msg">Informe seu nome</span></div>
+        <div class="field"><label for="m-tel">WhatsApp *</label><input id="m-tel" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" placeholder="(21) 90000-0000" required><span class="msg">WhatsApp inválido</span></div>
+        <div class="field"><label for="m-bairro">Bairro / cidade da coleta *</label><input id="m-bairro" name="bairro" autocomplete="address-level2" placeholder="Ex.: Copacabana, Duque de Caxias" required><span class="msg">Informe o bairro ou a cidade</span></div>
+        <div class="field biz-only hidden"><label for="m-empresa">Nome da empresa / condomínio</label><input id="m-empresa" name="empresa" autocomplete="organization"></div>
+        <label class="consent"><input type="checkbox" name="lgpd" checked required> <span>Autorizo o contato pelo WhatsApp para tratar da coleta.</span></label>
+        <p class="form-error" data-err="3" role="alert">Aceite o contato pelo WhatsApp para continuar.</p>
+        <div class="mnav"><button type="button" class="btn back" data-back>←</button><button type="submit" class="btn btn-wa"><svg><use href="#i-wa"/></svg>Ir para o WhatsApp</button></div>
+        <p class="secure"><svg><use href="#i-lock"/></svg>Leva 1 clique. Seus dados estão protegidos.</p>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var CFG = window.ZEDA_CONFIG || {};
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  $("#ano").textContent = new Date().getFullYear();
+
+  /* ---------- Rastreamento (GTM / Meta, se instalados) ---------- */
+  function track(event, data) {
+    data = data || {};
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push(Object.assign({ event: event }, data));
+    try {
+      if (typeof window.fbq === "function") {
+        if (event === "generate_lead") window.fbq("track", "Lead", { content_category: data.perfil || "" });
+        if (event === "lead_form_open") window.fbq("trackCustom", "LeadFormOpen", { origem: data.origem || "" });
+      }
+    } catch (e) {}
+  }
+
+  /* ---------- UTMs / origem do tráfego ---------- */
+  var UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"];
+  var UTMS = (function () {
+    var s = {};
+    try { s = JSON.parse(sessionStorage.getItem("zeda_utms") || "{}"); } catch (e) {}
+    var p = new URLSearchParams(location.search);
+    UTM_KEYS.forEach(function (k) { if (p.get(k)) s[k] = p.get(k); });
+    if (!s.referrer && document.referrer) s.referrer = document.referrer;
+    try { sessionStorage.setItem("zeda_utms", JSON.stringify(s)); } catch (e) {}
+    return s;
+  })();
+
+  /* ---------- Telefone ---------- */
+  function maskPhone(v) {
+    var d = v.replace(/\D/g, "").slice(0, 11);
+    if (d.length <= 2) return d.length ? "(" + d : "";
+    if (d.length <= 6) return "(" + d.slice(0, 2) + ") " + d.slice(2);
+    if (d.length <= 10) return "(" + d.slice(0, 2) + ") " + d.slice(2, 6) + "-" + d.slice(6);
+    return "(" + d.slice(0, 2) + ") " + d.slice(2, 7) + "-" + d.slice(7);
+  }
+  function validPhone(v) { var d = v.replace(/\D/g, ""); return d.length === 10 || d.length === 11; }
+  $$('input[type="tel"]').forEach(function (i) { i.addEventListener("input", function () { i.value = maskPhone(i.value); }); });
+
+  /* ---------- Classificação do lead ---------- */
+  function classify(l) {
+    if (l.prazo === "Só pesquisando") return "C - Frio";
+    if (l.perfil !== "Residência" || /Grande|Várias/.test(l.quantidade || "") || l.prazo === "Coleta recorrente") return "A - Quente";
+    return "B - Morno";
+  }
+
+  /* ---------- Envio: endpoint (opcional) + WhatsApp ---------- */
+  function sendLead(lead) {
+    lead.faixa = classify(lead);
+    lead.pagina = location.href.split("#")[0];
+    lead.data = new Date().toISOString();
+    Object.assign(lead, UTMS);
+    track("generate_lead", { origem: lead.origem, perfil: lead.perfil, faixa: lead.faixa });
+
+    if (CFG.leadEndpoint) {
+      var body = JSON.stringify(lead);
+      try {
+        if (!(navigator.sendBeacon && navigator.sendBeacon(CFG.leadEndpoint, new Blob([body], { type: "text/plain" })))) {
+          fetch(CFG.leadEndpoint, { method: "POST", body: body, keepalive: true, headers: { "Content-Type": "text/plain" } });
+        }
+      } catch (e) {}
+    }
+
+    var lines = ["Olá! Quero agendar uma *coleta de eletrônicos* ♻️", ""];
+    lines.push("*Nome:* " + lead.nome);
+    lines.push("*Perfil:* " + lead.perfil + (lead.empresa ? " (" + lead.empresa + ")" : ""));
+    lines.push("*Local:* " + lead.bairro);
+    if (lead.itens) lines.push("*Itens:* " + lead.itens);
+    if (lead.quantidade) lines.push("*Quantidade:* " + lead.quantidade);
+    if (lead.prazo) lines.push("*Prazo:* " + lead.prazo);
+    if (lead.extras) lines.push("*Preciso de:* " + lead.extras);
+    if (lead.mensagem) lines.push("*Detalhes:* " + lead.mensagem);
+    lines.push("", "Posso enviar fotos dos itens se precisar.");
+    var url = "https://wa.me/" + CFG.whatsapp + "?text=" + encodeURIComponent(lines.join("\n"));
+    setTimeout(function () { window.location.href = url; }, 250);
+  }
+
+  /* ---------- Popup de qualificação ---------- */
+  var modal = $("#leadModal"), form = $("#leadForm"), step = 1, origem = "", lastFocus = null;
+  var titles = {
+    "Residência": ["Coleta na sua casa", "3 perguntas rápidas e você continua no WhatsApp."],
+    "Condomínio": ["Coleta para o condomínio", "Conte o volume e combinamos a melhor data para os moradores."],
+    "Empresa": ["Coleta para empresas", "Informe o volume e se precisa de documentação da destinação."],
+    "Órgão público / escola": ["Coleta para instituições", "Informe o volume e se precisa de documentação da destinação."]
+  };
+
+  function bizToggle(scope, perfil) {
+    var isBiz = perfil && perfil !== "Residência";
+    $$(".biz-only", scope).forEach(function (el) { el.classList.toggle("hidden", !isBiz); });
+  }
+  function setPerfil(p) {
+    var r = $('input[name="perfil"][value="' + p + '"]', form);
+    if (r) r.checked = true;
+    bizToggle(form, p);
+    var t = titles[p];
+    $("#mTitle").textContent = t ? t[0] : "Agende sua coleta";
+    $("#mSub").textContent = t ? t[1] : "Responda rapidinho e continue no WhatsApp com tudo explicado.";
+  }
+  function go(n) {
+    step = n;
+    $$(".mstep", form).forEach(function (s) { s.classList.toggle("on", +s.dataset.step === n); });
+    $(".progress i", modal).style.width = (n / 3 * 100) + "%";
+    $$(".form-error", form).forEach(function (e) { e.classList.remove("show"); });
+    var first = $('.mstep.on input:not([type=hidden])', form);
+    if (first && n === 3) setTimeout(function () { first.focus(); }, 50);
+    track("lead_step", { origem: origem, step: n });
+  }
+  function openModal(o, perfil) {
+    origem = o || "cta";
+    lastFocus = document.activeElement;
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    if (perfil) setPerfil(perfil);
+    go(1);
+    track("lead_form_open", { origem: origem });
+    setTimeout(function () { $(".modal-x", modal).focus(); }, 50);
+  }
+  function closeModal() {
+    modal.classList.remove("open");
+    document.body.style.overflow = "";
+    if (lastFocus) lastFocus.focus();
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-lead]");
+    if (!t) return;
+    e.preventDefault();
+    if (t.classList.contains("chip")) {
+      $$(".chip").forEach(function (c) { c.classList.toggle("on", c === t); });
+    }
+    var perfil = t.dataset.perfil || ($(".chip.on") && t.dataset.lead === "hero-card" ? $(".chip.on").dataset.perfil : "");
+    openModal(t.dataset.lead, perfil);
+  });
+  $(".modal-x", modal).addEventListener("click", closeModal);
+  modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && modal.classList.contains("open")) closeModal(); });
+
+  $$('input[name="perfil"]', form).forEach(function (r) { r.addEventListener("change", function () { setPerfil(r.value); }); });
+
+  function val(name) { var el = $('input[name="' + name + '"]:checked', form); return el ? el.value : ""; }
+  function vals(name) { return $$('input[name="' + name + '"]:checked', form).map(function (i) { return i.value; }).join(", "); }
+
+  function checkStep(n) {
+    if (n === 1) return !!val("perfil") && !!vals("itens");
+    if (n === 2) return !!val("quantidade") && !!val("prazo");
+    return true;
+  }
+  $$("[data-next]", form).forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!checkStep(step)) { $('[data-err="' + step + '"]', form).classList.add("show"); return; }
+      go(step + 1);
+    });
+  });
+  $$("[data-back]", form).forEach(function (b) { b.addEventListener("click", function () { go(step - 1); }); });
+  // Avança sozinho no passo 2 quando as duas respostas estiverem marcadas
+  $$('input[name="prazo"]', form).forEach(function (r) {
+    r.addEventListener("change", function () { if (val("quantidade") && val("perfil") === "Residência") go(3); });
+  });
+
+  function fieldCheck(scope, name, ok) {
+    var f = $('[name="' + name + '"]', scope).closest(".field");
+    f.classList.toggle("err", !ok);
+    return ok;
+  }
+  function textOk(scope, name) { return fieldCheck(scope, name, $('[name="' + name + '"]', scope).value.trim().length >= 2); }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var ok = textOk(form, "nome");
+    ok = fieldCheck(form, "whatsapp", validPhone(form.whatsapp.value)) && ok;
+    ok = textOk(form, "bairro") && ok;
+    var consent = form.lgpd.checked;
+    $('[data-err="3"]', form).classList.toggle("show", !consent);
+    if (!ok || !consent) return;
+    sendLead({
+      origem: "popup-" + origem,
+      nome: form.nome.value.trim(),
+      whatsapp: form.whatsapp.value,
+      bairro: form.bairro.value.trim(),
+      empresa: val("perfil") !== "Residência" ? form.empresa.value.trim() : "",
+      perfil: val("perfil"),
+      itens: vals("itens"),
+      quantidade: val("quantidade"),
+      prazo: val("prazo"),
+      extras: val("perfil") !== "Residência" ? vals("extras") : ""
+    });
+  });
+
+  /* ---------- Formulário do rodapé ---------- */
+  var ff = $("#footForm");
+  ff.perfil.addEventListener("change", function () { bizToggle(ff, ff.perfil.value); });
+  ff.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var ok = textOk(ff, "nome");
+    ok = fieldCheck(ff, "whatsapp", validPhone(ff.whatsapp.value)) && ok;
+    ok = fieldCheck(ff, "perfil", !!ff.perfil.value) && ok;
+    ok = textOk(ff, "bairro") && ok;
+    ok = fieldCheck(ff, "quantidade", !!ff.quantidade.value) && ok;
+    var consent = ff.lgpd.checked;
+    $(".form-error", ff).classList.toggle("show", !consent);
+    if (!ok || !consent) return;
+    sendLead({
+      origem: "rodape",
+      nome: ff.nome.value.trim(),
+      whatsapp: ff.whatsapp.value,
+      perfil: ff.perfil.value,
+      bairro: ff.bairro.value.trim(),
+      empresa: ff.perfil.value !== "Residência" ? ff.empresa.value.trim() : "",
+      quantidade: ff.quantidade.value,
+      mensagem: ff.mensagem.value.trim()
+    });
+  });
+  $$("input,select", document).forEach(function (el) {
+    el.addEventListener("input", function () { var f = el.closest(".field"); if (f) f.classList.remove("err"); });
+  });
+
+  /* ---------- Popup de saída (desktop, 1x por sessão) ---------- */
+  if (CFG.exitIntent && window.matchMedia("(pointer:fine)").matches) {
+    document.addEventListener("mouseout", function h(e) {
+      if (e.relatedTarget || e.clientY > 10 || modal.classList.contains("open")) return;
+      try { if (sessionStorage.getItem("zeda_exit")) return; sessionStorage.setItem("zeda_exit", "1"); } catch (x) {}
+      document.removeEventListener("mouseout", h);
+      openModal("saida");
+      $("#mTitle").textContent = "Antes de sair: vamos levar seus eletrônicos?";
+    });
+  }
+})();
+</script>
+</body>
+</html>

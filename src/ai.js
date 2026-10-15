@@ -100,34 +100,60 @@ function dataHoraSP(d = new Date()) {
 
 const fmtBRL = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+/** Nome sem o sufixo de SEO repetido em todos os produtos da Tray. */
+const nomeCurto = (n) => String(n || "").replace(/\s*(ferro fundido)?\s*pronto artes\s*$/i, "").trim() || n;
+
+/**
+ * Catálogo enxuto que vai em toda chamada (fica em cache): uma linha por produto.
+ * A descrição completa é consultada pela ferramenta ver_produtos só quando o cliente pergunta.
+ */
 async function catalogo(env) {
   const { results } = await env.DB.prepare(
-    `SELECT id, nome, categoria, preco, preco_promo, promo_inicio, promo_fim, disponivel, estoque,
-            comprimento, largura, altura, peso_g, descricao, url
+    `SELECT id, nome, categoria, preco, preco_promo, promo_inicio, promo_fim, disponivel,
+            comprimento, largura, altura, peso_g, url
        FROM products WHERE exibir = 1 ORDER BY categoria, nome`
   ).all();
   if (!results.length) return "(Catálogo ainda não importado. Não cite preços nem modelos específicos; diga que o vendedor envia as opções.)";
   const hoje = new Date().toISOString().slice(0, 10);
-  let out = "", total = 0;
+  const linhas = ["código | produto | categoria | preço na loja | A x L x C (cm) | peso | link"];
   for (const p of results) {
     const { preco, de } = precoAtual(p, hoje);
-    const medidas = [p.altura, p.largura, p.comprimento].every((n) => n > 0) ? `${p.altura} x ${p.largura} x ${p.comprimento} cm (A x L x C)` : null;
-    const linha = [
-      `### ${p.nome} (cód. ${p.id})`,
-      p.categoria && `Categoria: ${p.categoria}`,
-      preco > 0 && `Preço na loja: ${fmtBRL(preco)}${de ? ` (promoção; de ${fmtBRL(de)})` : ""}`,
-      `Situação: ${p.disponivel ? "disponível" : "indisponível no momento"}`,
-      medidas && `Medidas: ${medidas}`,
-      p.peso_g > 0 && `Peso: ${(p.peso_g / 1000).toLocaleString("pt-BR")} kg`,
-      p.url && `Link: ${p.url}`,
-      p.descricao && `Descrição: ${p.descricao.slice(0, 700)}`
-    ].filter(Boolean).join("\n");
-    if (total + linha.length > 150000) { out += "\n(… catálogo resumido; para outros modelos, o vendedor envia as opções.)"; break; }
-    out += linha + "\n\n";
-    total += linha.length;
+    linhas.push([
+      p.id,
+      nomeCurto(p.nome) + (p.disponivel ? "" : " (indisponível no momento)"),
+      p.categoria || "",
+      preco > 0 ? fmtBRL(preco) + (de ? ` (promoção; de ${fmtBRL(de)})` : "") : "",
+      [p.altura, p.largura, p.comprimento].every((n) => n > 0) ? `${p.altura} x ${p.largura} x ${p.comprimento}` : "",
+      p.peso_g > 0 ? `${(p.peso_g / 1000).toLocaleString("pt-BR")} kg` : "",
+      p.url || ""
+    ].join(" | "));
   }
-  return out.trim();
+  return linhas.join("\n");
 }
+
+/** Ferramenta: descrição completa dos produtos pedidos. */
+async function verProdutos(env, codigos) {
+  const ids = [...new Set((Array.isArray(codigos) ? codigos : []).map((c) => String(c).trim()).filter(Boolean))].slice(0, 6);
+  if (!ids.length) return "Nenhum código informado.";
+  const { results } = await env.DB.prepare(
+    `SELECT id, nome, descricao FROM products WHERE exibir = 1 AND id IN (${ids.map(() => "?").join(",")})`
+  ).bind(...ids).all();
+  const achados = results.map((p) => `### ${nomeCurto(p.nome)} (cód. ${p.id})\n${p.descricao || "(sem descrição)"}`);
+  const faltam = ids.filter((id) => !results.some((p) => p.id === id));
+  return achados.join("\n\n") + (faltam.length ? `\n\nNão encontrados: ${faltam.join(", ")}` : "");
+}
+
+const TOOLS = [{
+  name: "ver_produtos",
+  description: "Retorna a descrição completa (material, garantia, o que acompanha, detalhes de medidas) dos produtos do catálogo pelos códigos. Use antes de responder sobre características que não estão na tabela do catálogo, como bomba do chafariz, garantia ou acabamento. Até 6 códigos por vez.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    properties: { codigos: { type: "array", items: { type: "string" }, description: "Códigos dos produtos (primeira coluna do catálogo)" } },
+    required: ["codigos"],
+    additionalProperties: false
+  }
+}];
 
 function systemPrompt(cfg, cat) {
   return `Você é ${cfg.nome}, assistente virtual da Pronto Artes, que atende pelo WhatsApp da loja. A Pronto Artes fabrica e vende peças em ferro fundido para jardins, casas, fazendas, condomínios e projetos de paisagismo: chafarizes, fontes, postes, esculturas, vasos, lenheiros e mobiliário urbano.
@@ -146,7 +172,7 @@ Acolher o cliente, entender o projeto e preparar a conversa para o vendedor. Qua
 - dimensões do espaço ou estilo desejado;
 - cidade/estado de entrega;
 - quando pretende comprar.
-Com o catálogo abaixo, você pode apresentar modelos, medidas, descrição, situação (disponível ou não), o preço exatamente como está na loja e o link do produto.
+Com o catálogo abaixo, você pode apresentar modelos, medidas, situação (disponível ou não), o preço exatamente como está na loja e o link do produto. Para detalhes que não estão na tabela (o que acompanha, bomba do chafariz, garantia, descrição), consulte a ferramenta ver_produtos antes de responder; não deduza pelo nome.
 
 ## O que você nunca faz
 - Nunca dá, oferece, sugere ou negocia desconto, condição especial, brinde ou parcelamento diferente do que está na loja.
@@ -170,7 +196,7 @@ Ao transferir, escreva uma resposta curta e elegante dizendo que um especialista
 ## Informações da loja
 ${cfg.infoLoja}
 
-## Catálogo (produtos exibidos na loja)
+## Catálogo (produtos exibidos na loja; colunas separadas por "|")
 ${cat}
 
 ## Formato da resposta
@@ -233,8 +259,7 @@ function transcricao(msgs) {
 async function gerar(env, { lead, msgs, tipo, background = false }) {
   if (!env.ANTHROPIC_API_KEY) throw new AiError("sem_chave_ia", "Cadastre o Secret ANTHROPIC_API_KEY no Worker (Cloudflare › Settings › Variables and Secrets).");
   const cfg = await aiConfig(env);
-  // Em segundo plano (webhook) o Worker tem ~30s depois da resposta: sem nova tentativa
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: background ? 0 : 1, timeout: background ? 20000 : 45000 });
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: background ? 0 : 1 });
   const aberto = horarioEquipe();
 
   const user = `<cliente>\n${contextoLead(lead)}\n</cliente>
@@ -244,34 +269,60 @@ async function gerar(env, { lead, msgs, tipo, background = false }) {
 Agora: ${dataHoraSP()} (horário de Brasília). A equipe de vendas está ${aberto ? "em horário de atendimento" : "fora do horário de atendimento"}.
 Escreva a próxima mensagem da loja para este cliente.${msgs.length && msgs[msgs.length - 1].de === "loja" ? " A última mensagem foi da loja: escreva um acompanhamento gentil, sem repetir o que já foi dito." : ""}`;
 
+  const system = [{ type: "text", text: systemPrompt(cfg, await catalogo(env)), cache_control: { type: "ephemeral", ttl: "1h" } }];
+  const messages = [{ role: "user", content: user }];
+  // Em segundo plano o Worker tem ~30s depois de responder à Meta: limite total para todas as chamadas
+  const prazo = Date.now() + (background ? 24000 : 90000);
+  const soma = { input: 0, output: 0, read: 0, write: 0 };
   let r;
-  try {
-    r = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: 4000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-      system: [{ type: "text", text: systemPrompt(cfg, await catalogo(env)), cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: user }]
+
+  for (let rodada = 0; ; rodada++) {
+    const resta = prazo - Date.now();
+    if (resta < 3000) throw new AiError("erro_ia", "A IA demorou demais para responder.");
+    try {
+      r = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 4000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
+        system,
+        tools: TOOLS,
+        messages
+      }, { timeout: resta });
+    } catch (err) {
+      if (err instanceof Anthropic.AuthenticationError) throw new AiError("chave_ia_invalida", "A chave da API foi recusada. Confira o Secret ANTHROPIC_API_KEY.");
+      if (err instanceof Anthropic.PermissionDeniedError) throw new AiError("chave_ia_sem_permissao", "A chave não tem permissão para este modelo.");
+      if (err instanceof Anthropic.RateLimitError) throw new AiError("ia_limite", "Limite de uso da API atingido. Tente de novo em instantes.");
+      if (err instanceof Anthropic.BadRequestError && /credit|billing|balance/i.test(err.message)) throw new AiError("ia_sem_credito", "Sem crédito na conta da Claude Platform (Billing).");
+      if (err instanceof Anthropic.APIError) throw new AiError("erro_ia", `Erro da API (${err.status ?? "rede"}): ${err.message}`);
+      throw err;
+    }
+    const u = r.usage || {};
+    soma.input += u.input_tokens || 0; soma.output += u.output_tokens || 0;
+    soma.read += u.cache_read_input_tokens || 0; soma.write += u.cache_creation_input_tokens || 0;
+
+    const pedidos = r.content.filter((b) => b.type === "tool_use");
+    if (r.stop_reason !== "tool_use" || !pedidos.length || rodada >= 2) break;
+    messages.push({ role: "assistant", content: r.content });
+    messages.push({
+      role: "user",
+      content: await Promise.all(pedidos.map(async (b) => ({
+        type: "tool_result", tool_use_id: b.id,
+        content: b.name === "ver_produtos" ? await verProdutos(env, b.input?.codigos) : "Ferramenta desconhecida.",
+        ...(b.name === "ver_produtos" ? {} : { is_error: true })
+      })))
     });
-  } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) throw new AiError("chave_ia_invalida", "A chave da API foi recusada. Confira o Secret ANTHROPIC_API_KEY.");
-    if (err instanceof Anthropic.PermissionDeniedError) throw new AiError("chave_ia_sem_permissao", "A chave não tem permissão para este modelo.");
-    if (err instanceof Anthropic.RateLimitError) throw new AiError("ia_limite", "Limite de uso da API atingido. Tente de novo em instantes.");
-    if (err instanceof Anthropic.BadRequestError && /credit|billing|balance/i.test(err.message)) throw new AiError("ia_sem_credito", "Sem crédito na conta da Claude Platform (Billing).");
-    if (err instanceof Anthropic.APIError) throw new AiError("erro_ia", `Erro da API (${err.status ?? "rede"}): ${err.message}`);
-    throw err;
   }
 
-  const u = r.usage || {};
   await env.DB.prepare(
     "INSERT INTO ai_usage (lead_id, tipo, modelo, input_tokens, output_tokens, cache_read, cache_write) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).bind(lead?.id || null, tipo, r.model || MODEL, u.input_tokens || 0, u.output_tokens || 0, u.cache_read_input_tokens || 0, u.cache_creation_input_tokens || 0).run();
+  ).bind(lead?.id || null, tipo, r.model || MODEL, soma.input, soma.output, soma.read, soma.write).run();
 
   if (r.stop_reason === "refusal") {
     return { resposta: "", transferir: true, motivo: "a IA não respondeu esta mensagem", nota_interna: "" };
   }
+  if (r.stop_reason === "tool_use") throw new AiError("erro_ia", "A IA consultou produtos demais sem concluir a resposta.");
   const text = r.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   let out;
   try { out = JSON.parse(text); } catch { throw new AiError("erro_ia", r.stop_reason === "max_tokens" ? "Resposta da IA cortada (limite de tamanho)." : "Resposta da IA em formato inesperado."); }
@@ -361,7 +412,7 @@ export async function onInboundMessage(env, leadId, inboundAt, logEvent) {
   const cfg = await aiConfig(env);
   if (cfg.modo === "desligado" || !cfg.temChave) return;
 
-  await sleep(5000);
+  await sleep(3000);
   const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(leadId).first();
   if (!lead || lead.ai_pausada || lead.stage === "ganho") return;
   if (lead.last_inbound_at && lead.last_inbound_at > inboundAt) return; // chegou mensagem mais nova: ela responde

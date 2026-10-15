@@ -14,6 +14,7 @@ import {
   hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
+import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
@@ -396,6 +397,16 @@ async function handleAdminApi(request, env, url) {
     }
   }
 
+  if (path === "/products" && method === "GET") return json({ ok: true, products: await listProductsAdmin(env) });
+  if (path === "/products/import" && method === "POST") {
+    const body = await readJson(request);
+    const csv = String(body?.csv || "");
+    if (csv.length < 20) return json({ ok: false, error: "planilha_vazia" }, 400);
+    if (csv.length > 20 * 1024 * 1024) return json({ ok: false, error: "planilha_grande" }, 400);
+    const r = await importTrayCsv(env, csv);
+    return r.erro ? json({ ok: false, error: "planilha_invalida", message: r.erro }, 400) : json({ ok: true, ...r });
+  }
+
   if (path === "/tray" && method === "GET") return json({ ok: true, ...(await trayStatus(env, url.origin)) });
   if (path === "/tray" && method === "POST") {
     try {
@@ -493,6 +504,10 @@ export default {
     const p = url.pathname;
 
     if (p === "/api/lead") return handlePublicLead(request, env, ctx);
+    if (p === "/api/products" && request.method === "GET") {
+      const products = await listProductsPublic(env).catch(() => []);
+      return json({ ok: true, products }, 200, { "cache-control": "public, max-age=300" });
+    }
     const tcb = p.match(/^\/api\/tray\/callback\/([0-9a-f]+)$/);
     if (tcb) return handleTrayCallback(request, env, tcb[1]);
     if (p === "/api/tray/webhook") {

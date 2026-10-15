@@ -77,20 +77,26 @@
   /* ------------------------------------------------------------------
      Render dos produtos + filtros
      ------------------------------------------------------------------ */
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
   function renderProducts() {
     var grid = $("#product-grid");
     if (!grid) return;
     grid.innerHTML = PRODUCTS.map(function (p, i) {
       var pix = Math.round(p.price * 0.9 * 100) / 100;
       var installments = Math.min(6, Math.max(1, Math.floor(p.price / 350)));
-      var tag = p.tag ? '<span class="product__tag' + (p.gold ? " product__tag--gold" : "") + '">' + p.tag + "</span>" : "";
+      var tag = p.tag ? '<span class="product__tag' + (p.gold ? " product__tag--gold" : "") + '">' + esc(p.tag) + "</span>" : "";
       return (
         '<article class="product" data-cat="' + p.cat + '">' +
           '<div class="product__img">' + tag +
-            '<img src="' + p.img + '" alt="' + p.name + ' em ferro fundido" loading="lazy" decoding="async">' +
+            '<img src="' + esc(p.img) + '" alt="' + esc(p.name) + '" loading="lazy" decoding="async">' +
           "</div>" +
           '<div class="product__body">' +
-            '<h3 class="product__name">' + p.name + "</h3>" +
+            '<h3 class="product__name">' + esc(p.name) + "</h3>" +
             (p.old ? '<span class="product__old">' + brl(p.old) + "</span>" : "") +
             '<span class="product__price">' + (p.from ? '<small style="color:var(--ink-soft)">a partir de</small>' : "") + brl(pix) + "<small>no PIX (10% off)</small></span>" +
             '<span class="product__inst">ou ' + brl(p.price) + " em até " + installments + "x sem juros</span>" +
@@ -118,6 +124,63 @@
         track("product_filter", { filtro: f });
       });
     });
+  }
+
+  /* ------------------------------------------------------------------
+     Catálogo do CRM (preços e promoções atualizados a partir da Tray)
+     ------------------------------------------------------------------ */
+  var norm = function (t) { return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(); };
+
+  /** Classifica o produto nos filtros da landing pelo nome e, se preciso, pela categoria da Tray. */
+  function catKey(p) {
+    var n = norm(p.nome), c = norm(p.categoria);
+    if (/^KIT\b/.test(n)) return "kit";
+    if (/CHAFARIZ|FONTE|CUBA/.test(n)) return "chafariz";
+    if (/LENHEIRO|LAREIRA|FOGUEIRA/.test(n)) return "lenheiro";
+    if (/POSTE|LUMINARIA|APLIQUE|ARANDELA|TOCHEIRO|BALIZADOR/.test(n)) return "poste";
+    if (/VASO|ANFORA|FLOREIRA/.test(n)) return "vaso";
+    if (/CHAFARIZ/.test(c)) return "chafariz";
+    if (/POSTE/.test(c)) return "poste";
+    if (/LENHEIRO/.test(c)) return "lenheiro";
+    if (/VASO/.test(c)) return "vaso";
+    return "escultura";
+  }
+
+  function loadCatalog() {
+    if (!window.fetch) return;
+    fetch("/api/products").then(function (r) { return r.json(); }).then(function (d) {
+      var list = (d && d.products) || [];
+      if (list.length < 6) return; // catálogo ainda não importado: mantém a vitrine padrão
+      // Até 4 mais vendidos por linha, intercalando as linhas para a vitrine ficar variada
+      var groups = {};
+      list.forEach(function (p) {
+        var k = catKey(p);
+        (groups[k] = groups[k] || []).push(p);
+      });
+      // Catálogo parcial (ex.: só chafarizes) deixaria a vitrine pobre: exige ao menos 4 linhas de produto
+      if (Object.keys(groups).length < 4) return;
+      var order = ["chafariz", "poste", "escultura", "vaso", "lenheiro", "kit"];
+      var picked = [];
+      for (var round = 0; round < 4; round++) {
+        order.forEach(function (k) { if (groups[k] && groups[k][round]) picked.push(groups[k][round]); });
+      }
+      PRODUCTS = picked.map(function (p) {
+        var k = catKey(p);
+        var off = p.de ? Math.round((1 - p.preco / p.de) * 100) : 0;
+        return {
+          cat: k, name: p.nome, price: p.preco, old: p.de, img: p.imagem || "assets/img/logo-app-512.png",
+          tag: off >= 5 ? "-" + off + "% OFF" : null
+        };
+      });
+      renderProducts();
+      $$(".filter").forEach(function (b) {
+        var f = b.getAttribute("data-filter");
+        b.hidden = f !== "all" && !PRODUCTS.some(function (p) { return p.cat === f; });
+      });
+      var active = $(".filter.is-active");
+      var f = active ? active.getAttribute("data-filter") : "all";
+      $$(".product").forEach(function (card) { card.hidden = f !== "all" && card.getAttribute("data-cat") !== f; });
+    }).catch(function () { /* mantém a vitrine padrão */ });
   }
 
   /* ------------------------------------------------------------------
@@ -448,6 +511,7 @@
 
   /* init */
   renderProducts();
+  loadCatalog();
   fillInterestChips();
   initFilters();
   initMasks();

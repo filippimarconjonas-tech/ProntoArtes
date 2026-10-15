@@ -43,6 +43,11 @@ Leads que chamam direto no WhatsApp entram sozinhos pela integração abaixo (ou
 - "Salvar e conectar" cadastra o webhook e assina a conta; "Conectar número da loja" roda o Cadastro incorporado
   da Meta em modo coexistência (exige app aprovado como Provedor de Tecnologia e um Configuration ID do Login do Facebook para Empresas).
 
+## Catálogo de produtos
+`/admin` › Produtos: importa a planilha exportada da Tray (Produtos › Exportar, CSV). Cria ou atualiza pelo código do produto
+(preço, promoção com datas, estoque, medidas, descrição, fotos, link). A landing lê `/api/products` e monta a vitrine
+com os mais vendidos de cada linha (só quando o catálogo cobre ao menos 4 linhas; senão mantém a vitrine fixa do `main.js`).
+
 ## Loja Tray
 `/admin` › Loja Tray: endereço da API (`https://…/web_api`), consumer key/secret do aplicativo Tray e o `code` de autorização da loja.
 - Pedido aguardando pagamento → lead em *Aguardando pagamento*; pago → *Venda fechada (Site Tray)* com valor e nº do pedido;

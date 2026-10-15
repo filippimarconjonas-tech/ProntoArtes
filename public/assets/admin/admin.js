@@ -50,6 +50,8 @@
     valor_invalido: "Valor inválido.",
     senha_atual_incorreta: "Senha atual incorreta.",
     senha_curta: "A nova senha precisa ter pelo menos 10 caracteres.",
+    planilha_vazia: "Arquivo vazio.",
+    planilha_grande: "Arquivo grande demais (máx. 20 MB).",
     store_url_invalida: "Endereço da loja inválido: use https://www.prontoartes.com.br",
     api_address_invalido: "Endereço da API inválido: deve começar com https:// e terminar em /web_api.",
     app_secret_invalido: "Chave secreta inválida: são 32 caracteres (0-9, a-f).",
@@ -120,7 +122,7 @@
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1).split("?")[0];
@@ -139,6 +141,7 @@
     if (v === "whatsapp") return renderWhatsApp();
     if (v === "modelos") return renderTemplates();
     if (v === "tray") return renderTray();
+    if (v === "produtos") return renderProducts();
     return renderList();
   }
 
@@ -698,6 +701,64 @@
             msg.textContent = err.serverMessage || ERR[err.code] || err.code;
             $$("button", form).forEach(function (b) { b.disabled = false; });
           });
+      });
+    }).catch(fail);
+  }
+
+  /* ---------------- catálogo de produtos ---------------- */
+  function renderProducts() {
+    var view = $("#view");
+    view.innerHTML = '<p class="empty">Carregando…</p>';
+    api("/products").then(function (d) {
+      var all = d.products;
+      var cats = {};
+      all.forEach(function (p) { cats[p.categoria || "Sem categoria"] = (cats[p.categoria || "Sem categoria"] || 0) + 1; });
+      var last = all.reduce(function (m, p) { return p.updated_at > m ? p.updated_at : m; }, "");
+      view.innerHTML =
+        '<div class="panels" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-bottom:14px">' +
+          '<div class="panel"><h3>Importar planilha da Tray</h3>' +
+            '<p class="muted" style="font-size:12.5px;margin:0 0 10px">No painel da Tray: <strong>Produtos › Exportar</strong> (todos os produtos, formato CSV). Envie o arquivo aqui: produtos novos são criados e os existentes têm preço, promoção, estoque e fotos atualizados.</p>' +
+            '<input type="file" id="csv-file" accept=".csv,text/csv"> <button class="btn btn--primary btn--sm" id="csv-send" disabled>Importar</button>' +
+            '<p class="form-msg" id="csv-msg"></p></div>' +
+          '<div class="panel"><h3>Resumo</h3><dl class="answers">' +
+            row("Produtos", num(all.length)) +
+            row("Visíveis na loja", num(all.filter(function (p) { return p.exibir && p.disponivel; }).length)) +
+            row("Em promoção", num(all.filter(function (p) { return p.de; }).length)) +
+            row("Última atualização", last ? fmtDate(last, true) : "—") +
+            row("Categorias", Object.keys(cats).map(function (c) { return c + " (" + cats[c] + ")"; }).join(", ")) +
+          "</dl></div></div>" +
+        '<div class="table-wrap"><table><thead><tr><th></th><th>Produto</th><th>Categoria</th><th>Preço</th><th>PIX (10%)</th><th>Estoque</th><th>Na loja</th></tr></thead><tbody>' +
+          (all.length ? all.filter(function (p) {
+            var q = S.q.toLowerCase().trim();
+            return !q || (p.nome + " " + (p.categoria || "") + " " + p.id).toLowerCase().indexOf(q) >= 0;
+          }).map(function (p) {
+            return "<tr><td>" + (p.imagens[0] ? '<img src="' + esc(p.imagens[0]) + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px" loading="lazy">' : "") +
+              '</td><td class="trunc" style="max-width:360px;white-space:normal">' + (p.url ? '<a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.nome) + "</a>" : esc(p.nome)) +
+              '<br><small class="muted">cód. ' + esc(p.id) + "</small></td><td>" + esc(p.categoria || "") + "</td><td>" +
+              (p.de ? '<small class="muted" style="text-decoration:line-through">' + brl(p.de) + "</small><br>" : "") + brl(p.preco) +
+              "</td><td>" + brl((p.preco || 0) * 0.9) + "</td><td>" + (p.estoque == null ? "—" : num(p.estoque)) + "</td><td>" +
+              (p.exibir && p.disponivel ? "✅" : "⛔") + "</td></tr>";
+          }).join("") : '<tr><td colspan="7" class="empty">Nenhum produto ainda. Importe a planilha da Tray.</td></tr>') +
+        "</tbody></table></div>";
+
+      var file = $("#csv-file"), send = $("#csv-send"), msg = $("#csv-msg");
+      file.addEventListener("change", function () { send.disabled = !file.files.length; });
+      send.addEventListener("click", function () {
+        var f = file.files[0]; if (!f) return;
+        send.disabled = true; msg.style.color = "var(--soft)"; msg.textContent = "Lendo planilha…";
+        f.arrayBuffer().then(function (buf) {
+          // A exportação da Tray vem em ISO-8859-1; se for UTF-8 válido, usa UTF-8
+          var text;
+          try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+          catch (e) { text = new TextDecoder("iso-8859-1").decode(buf); }
+          return api("/products/import", { method: "POST", body: { csv: text } });
+        }).then(function (r) {
+          toast(r.importados + " produtos importados (" + r.total + " no catálogo)");
+          renderProducts();
+        }).catch(function (err) {
+          msg.style.color = ""; msg.textContent = err.serverMessage || ERR[err.code] || "Não foi possível importar.";
+          send.disabled = false;
+        });
       });
     }).catch(fail);
   }

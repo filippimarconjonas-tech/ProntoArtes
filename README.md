@@ -53,7 +53,8 @@ Leads que chamam direto no WhatsApp entram sozinhos pela integração abaixo (ou
   pausa a si mesma no lead, marca follow-up e registra o motivo no histórico.
 - A IA também pausa no lead quando a equipe responde por conta própria (app do WhatsApp ou texto livre no CRM). Reative na ficha do lead.
 - Simulador no painel para testar sem enviar nada; consumo de tokens do mês aparece no status.
-- Código: `src/ai.js` (modelo `claude-opus-5-5`, esforço baixo, cache do prompt, saída em JSON e fallback automático do servidor em caso de recusa).
+- Código: `src/ai.js` (modelo `claude-opus-5-5`, esforço baixo, cache de 1h do prompt, saída em JSON e fallback automático do servidor em caso de recusa).
+  O catálogo vai enxuto (uma linha por produto); a descrição completa é consultada pela ferramenta `ver_produtos` só quando o cliente pergunta.
 
 ## Catálogo de produtos
 `/admin` › Produtos: importa a planilha exportada da Tray (Produtos › Exportar, CSV). Cria ou atualiza pelo código do produto

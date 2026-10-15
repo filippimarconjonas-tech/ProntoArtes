@@ -211,3 +211,16 @@ td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 50; box-shadow: var(--shadow); }
 .toast.is-err { background: var(--danger); }
+
+/* Atendimento com IA */
+.tag--ia { background: #ece8fb; color: #5b3fb8; font-weight: 700; }
+.timeline li.t-ia { border-color: #7c5cd6; background: #f5f2fd; padding: 6px 10px; border-radius: 0 8px 8px 0; }
+.ia-draft { background: #f5f2fd; border: 1px solid #ddd3f7; border-radius: 10px; padding: 10px; }
+.ia-draft textarea { width: 100%; border: 1.5px solid var(--line); border-radius: 9px; padding: 8px 10px; resize: vertical; font: inherit; }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; background: #faf7f3; border-radius: 10px; padding: 12px; }
+.chat__msg { max-width: 80%; padding: 8px 12px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
+.chat__msg--in { align-self: flex-start; background: #fff; border: 1px solid var(--line); }
+.chat__msg--out { align-self: flex-end; background: #dcf5e3; }
+.chat__flag, .chat__note { display: block; margin-top: 6px; font-size: 11.5px; color: var(--soft); }
+.chat__flag { color: var(--danger); font-weight: 600; }
+#ia-sec { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }

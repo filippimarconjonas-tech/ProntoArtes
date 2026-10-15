@@ -43,6 +43,18 @@ Leads que chamam direto no WhatsApp entram sozinhos pela integração abaixo (ou
 - "Salvar e conectar" cadastra o webhook e assina a conta; "Conectar número da loja" roda o Cadastro incorporado
   da Meta em modo coexistência (exige app aprovado como Provedor de Tecnologia e um Configuration ID do Login do Facebook para Empresas).
 
+## Atendimento com IA (Claude)
+`/admin` › Atendimento IA. A chave da API fica no Secret `ANTHROPIC_API_KEY` do Worker (Cloudflare › Settings › Variables and Secrets), nunca no repositório.
+- **Modos:** desligado (só sob demanda) · rascunho (cada mensagem do cliente gera uma sugestão na ficha do lead; o vendedor revisa e envia) ·
+  automático fora do horário (seg–sex 8h–18h, sáb 8h–13h30; dentro do horário deixa rascunho) · automático sempre.
+- Usa o catálogo importado (preço da loja, medidas, descrição, link), as respostas do formulário e a conversa do WhatsApp do lead.
+- Regras fixas: nunca dá desconto, nunca promete prazo, nunca informa frete, nunca confirma cor/peça sob medida. O texto "Informações da loja" é editável no painel.
+- Quando o cliente precisa de vendedor (orçamento, frete, prazo, desconto, fechamento, reclamação, pedido de atendente), a IA avisa o cliente,
+  pausa a si mesma no lead, marca follow-up e registra o motivo no histórico.
+- A IA também pausa no lead quando a equipe responde por conta própria (app do WhatsApp ou texto livre no CRM). Reative na ficha do lead.
+- Simulador no painel para testar sem enviar nada; consumo de tokens do mês aparece no status.
+- Código: `src/ai.js` (modelo `claude-opus-5-5`, esforço baixo, cache do prompt, saída em JSON e fallback automático do servidor em caso de recusa).
+
 ## Catálogo de produtos
 `/admin` › Produtos: importa a planilha exportada da Tray (Produtos › Exportar, CSV). Cria ou atualiza pelo código do produto
 (preço, promoção com datas, estoque, medidas, descrição, fotos, link). A landing lê `/api/products` e monta a vitrine

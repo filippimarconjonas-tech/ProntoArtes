@@ -18,6 +18,10 @@ import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
+import {
+  aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
+  pauseOnHumanReply, onInboundMessage
+} from "./ai.js";
 
 const FORM_FIELDS = ["nome", "whatsapp", "cidade", "email", "produto", "interesse", "espaco", "prazo", "mensagem"];
 const TRACK_FIELDS = ["origem", "pagina", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "referrer"];
@@ -390,10 +394,36 @@ async function handleAdminApi(request, env, url) {
       if (lm && method === "POST") {
         const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(+lm[1]).first();
         if (!lead) return json({ ok: false, error: "not_found" }, 404);
-        return json({ ok: true, ...(await sendToLead(env, lead, (await readJson(request)) || {}, user.username, logEvent)) });
+        const body = (await readJson(request)) || {};
+        const r = await sendToLead(env, lead, body, user.username, logEvent);
+        if (body.text) await pauseOnHumanReply(env, lead.id);
+        return json({ ok: true, ...r });
       }
     } catch (err) {
       return json({ ok: false, error: err.code || "erro_meta", message: err.message }, 400);
+    }
+  }
+
+  if (path === "/ia" && method === "GET") return json({ ok: true, ...(await aiStatus(env)) });
+  if (path.startsWith("/ia") || /^\/leads\/\d+\/ia\//.test(path)) {
+    try {
+      const body = method === "POST" ? (await readJson(request)) || {} : {};
+      if (path === "/ia" && method === "POST") { await saveAiSettings(env, body); return json({ ok: true, ...(await aiStatus(env)) }); }
+      if (path === "/ia/teste" && method === "POST") return json({ ok: true, ...(await testAi(env)) });
+      if (path === "/ia/simular" && method === "POST") return json({ ok: true, ...(await simulateAi(env, body)) });
+      const im = path.match(/^\/leads\/(\d+)\/ia\/(sugerir|enviar|descartar|ativa)$/);
+      if (im && method === "POST") {
+        const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(+im[1]).first();
+        if (!lead) return json({ ok: false, error: "not_found" }, 404);
+        if (im[2] === "sugerir") return json({ ok: true, ...(await draftForLead(env, lead, logEvent)) });
+        if (im[2] === "enviar") return json({ ok: true, ...(await sendDraft(env, lead, body.text, user.username, logEvent)) });
+        if (im[2] === "descartar") { await discardDraft(env, lead.id); return json({ ok: true }); }
+        await setLeadAi(env, lead.id, !!body.ativa, user.username, logEvent);
+        return json({ ok: true });
+      }
+    } catch (err) {
+      if (err.code) return json({ ok: false, error: err.code, message: err.message }, 400);
+      throw err;
     }
   }
 
@@ -438,7 +468,8 @@ async function handleAdminApi(request, env, url) {
     const { results } = await env.DB.prepare(
       `SELECT id, created_at, updated_at, nome, whatsapp, cidade, produto, interesse, espaco, prazo, faixa, score, perfil,
               pipeline, stage, stage_changed_at, post_stage, next_followup_at, valor, canal_fechamento, motivo_perda,
-              origem, canal_entrada, utm_source, envios, first_contact_at, last_inbound_at, last_outbound_at
+              origem, canal_entrada, utm_source, envios, first_contact_at, last_inbound_at, last_outbound_at,
+              ai_pausada, CASE WHEN ai_draft IS NULL THEN 0 ELSE 1 END AS ai_rascunho
          FROM leads ORDER BY created_at DESC LIMIT 2000`
     ).all();
     return json({ ok: true, leads: results });
@@ -520,7 +551,11 @@ export default {
     }
     if (p === "/api/whatsapp/webhook") {
       try {
-        return await handleWhatsAppWebhook(request, env, { upsertLead, logEvent });
+        return await handleWhatsAppWebhook(request, env, {
+          upsertLead, logEvent,
+          onInbound: (leadId, at) => ctx.waitUntil(onInboundMessage(env, leadId, at, logEvent).catch((err) => console.error("ia_error", err?.message))),
+          onHumanReply: (leadId) => pauseOnHumanReply(env, leadId)
+        });
       } catch (err) {
         console.error("whatsapp_error", err?.stack || err?.message);
         return new Response("Erro", { status: 500 });

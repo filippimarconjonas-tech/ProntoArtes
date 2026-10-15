@@ -55,7 +55,8 @@
     store_url_invalida: "Endereço da loja inválido: use https://www.prontoartes.com.br",
     api_address_invalido: "Endereço da API inválido: deve começar com https:// e terminar em /web_api.",
     app_secret_invalido: "Chave secreta inválida: são 32 caracteres (0-9, a-f).",
-    token_invalido: "Token inválido: começa com “EA”."
+    token_invalido: "Token inválido: começa com “EA”.",
+    mensagem_vazia: "Escreva a mensagem."
   };
 
   function toast(msg, err) {
@@ -122,7 +123,7 @@
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos", ia: "Atendimento com IA" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1).split("?")[0];
@@ -142,6 +143,7 @@
     if (v === "modelos") return renderTemplates();
     if (v === "tray") return renderTray();
     if (v === "produtos") return renderProducts();
+    if (v === "ia") return renderIa();
     return renderList();
   }
 
@@ -243,6 +245,7 @@
     if (l.perfil && l.perfil !== "Consumidor final") tags.push('<span class="tag">' + esc(l.perfil) + "</span>");
     if (l.canal_entrada === "whatsapp") tags.push('<span class="tag">WhatsApp direto</span>');
     if (l.canal_entrada === "tray") tags.push('<span class="tag">Comprou na loja</span>');
+    if (l.ai_rascunho) tags.push('<span class="tag tag--ia">🤖 Resposta sugerida</span>');
     if (l.envios > 1) tags.push('<span class="tag">' + l.envios + " envios</span>");
     if (l.stage === "perdido" && l.motivo_perda) tags.push('<span class="tag">' + esc(l.motivo_perda) + "</span>");
     if (l.stage === "ganho" && l.canal_fechamento) tags.push('<span class="tag">' + esc(canalLabel(l.canal_fechamento)) + "</span>");
@@ -625,6 +628,148 @@
     });
   }
 
+  /* ---------------- atendimento com IA ---------------- */
+  var IA_MODOS = [
+    { id: "desligado", label: "Desligado", hint: "A IA só responde quando alguém clica em “Sugerir resposta” na ficha do lead ou usa o simulador." },
+    { id: "rascunho", label: "Rascunho (recomendado para começar)", hint: "Cada mensagem do cliente gera uma resposta sugerida na ficha do lead. Um vendedor revisa, edita se quiser e envia." },
+    { id: "fora_horario", label: "Automático fora do horário", hint: "Responde sozinha fora do horário da equipe (seg–sex 8h–18h, sáb 8h–13h30). Dentro do horário, deixa rascunho." },
+    { id: "automatico", label: "Automático sempre", hint: "Responde sozinha a qualquer hora e chama um vendedor quando o cliente precisa (orçamento, frete, prazo, desconto…)." }
+  ];
+
+  function iaBubble(m) {
+    return '<div class="chat__msg chat__msg--' + (m.de === "cliente" ? "in" : "out") + '">' + esc(m.texto) +
+      (m.transferir ? '<small class="chat__flag">🙋 Passaria para um vendedor' + (m.motivo ? ": " + esc(m.motivo) : "") + "</small>" : "") +
+      (m.nota ? '<small class="chat__note">Nota para a equipe: ' + esc(m.nota) + "</small>" : "") + "</div>";
+  }
+
+  var SIM = [];
+  function renderIa() {
+    var view = $("#view");
+    view.innerHTML = '<p class="empty">Carregando…</p>';
+    api("/ia").then(function (st) {
+      var u = st.uso_mes || {};
+      view.innerHTML = '<div class="panels" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' +
+        '<div class="panel"><h3>Status</h3><dl class="answers">' +
+          row("Chave da API", st.temChave ? "✅ Configurada (Secret ANTHROPIC_API_KEY)" : "❌ Falta o Secret ANTHROPIC_API_KEY na Cloudflare") +
+          row("Modelo", st.modelo) +
+          row("Modo atual", (IA_MODOS.filter(function (m) { return m.id === st.modo; })[0] || {}).label) +
+          row("Equipe agora", st.horario_equipe ? "Em horário de atendimento" : "Fora do horário") +
+          row("Respostas geradas no mês", num(u.respostas)) +
+          row("Tokens no mês", num((u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0)) + " de entrada · " + num(u.output) + " de saída") +
+          row("Sugestões aguardando envio", num(st.rascunhos_pendentes)) +
+        "</dl>" +
+        '<p style="margin:12px 0 0"><button class="btn btn--ghost btn--sm" id="ia-test"' + (st.temChave ? "" : " disabled") + '>Testar conexão com a IA</button> <span class="form-msg" id="ia-test-msg"></span></p>' +
+        '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Para responder no WhatsApp, a integração da Meta precisa estar conectada. Até lá, use o simulador e o botão “Sugerir resposta” nas fichas.</p></div>' +
+
+        '<div class="panel"><h3>Configuração</h3><form id="ia-form">' +
+          '<label class="fld"><span>Modo de atuação</span><select name="modo">' + IA_MODOS.map(function (m) {
+            return '<option value="' + m.id + '"' + (st.modo === m.id ? " selected" : "") + ">" + esc(m.label) + "</option>";
+          }).join("") + "</select></label>" +
+          '<p class="muted" id="ia-modo-hint" style="font-size:12.5px;margin:-4px 0 12px"></p>' +
+          '<label class="fld"><span>Nome da assistente</span><input name="nome" maxlength="40" value="' + esc(st.nome) + '"></label>' +
+          '<label class="fld"><span>Informações da loja (a IA segue isto à risca)</span><textarea name="info_loja" rows="10">' + esc(st.infoLoja) + "</textarea></label>" +
+          '<p class="muted" style="font-size:12.5px;margin:-4px 0 12px">Regras fixas, que não dependem deste texto: a IA nunca dá desconto, nunca promete prazo, nunca informa frete e nunca confirma cor ou peça sob medida. Os produtos, preços e links vêm do catálogo importado em Produtos.</p>' +
+          '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--primary">Salvar</button><button type="button" class="btn btn--ghost" id="ia-reset">Restaurar texto padrão</button></div>' +
+        "</form></div>" +
+
+        '<div class="panel panel--wide"><h3>Simulador de conversa</h3>' +
+          '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Escreva como se fosse um cliente para ver como a IA responde. Nada é enviado no WhatsApp.</p>' +
+          '<div class="chat" id="ia-chat">' + (SIM.length ? SIM.map(iaBubble).join("") : '<p class="empty">Ex.: “Boa tarde, vocês têm chafariz para jardim de uns 3 metros?”</p>') + "</div>" +
+          '<form class="note-form" id="ia-sim" style="margin-top:10px"><textarea name="text" placeholder="Mensagem do cliente…" required></textarea><button class="btn btn--wa">Enviar</button></form>' +
+          '<button class="link" id="ia-clear">Limpar conversa</button>' +
+        "</div></div>";
+
+      var form = $("#ia-form");
+      function hint() { var m = IA_MODOS.filter(function (x) { return x.id === form.modo.value; })[0]; $("#ia-modo-hint").textContent = m ? m.hint : ""; }
+      form.modo.addEventListener("change", hint); hint();
+      $("#ia-reset").addEventListener("click", function () { form.info_loja.value = st.info_padrao; });
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (form.modo.value === "automatico" && st.modo !== "automatico" && !confirm("No modo automático a IA responde os clientes sozinha. Testou no simulador? Continuar?")) return;
+        api("/ia", { method: "POST", body: { modo: form.modo.value, nome: form.nome.value, info_loja: form.info_loja.value } })
+          .then(function () { toast("Configuração salva"); renderIa(); }).catch(fail);
+      });
+      $("#ia-test").addEventListener("click", function () {
+        var b = this, msg = $("#ia-test-msg");
+        b.disabled = true; msg.style.color = "var(--soft)"; msg.textContent = "Testando…";
+        api("/ia/teste", { method: "POST", body: {} }).then(function (r) {
+          msg.style.color = "var(--a)"; msg.textContent = "✅ Funcionando. Exemplo: “" + r.exemplo + "”";
+        }).catch(function (err) { msg.style.color = "var(--danger)"; msg.textContent = err.serverMessage || err.code; })
+          .then(function () { b.disabled = false; });
+      });
+      var chat = $("#ia-chat"), sim = $("#ia-sim");
+      chat.scrollTop = chat.scrollHeight;
+      sim.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var t = sim.text.value.trim(); if (!t) return;
+        SIM.push({ de: "cliente", texto: t });
+        sim.text.value = "";
+        chat.innerHTML = SIM.map(iaBubble).join("") + '<p class="empty">Digitando…</p>';
+        chat.scrollTop = chat.scrollHeight;
+        $("button", sim).disabled = true;
+        api("/ia/simular", { method: "POST", body: { mensagens: SIM.map(function (m) { return { de: m.de, texto: m.texto }; }) } }).then(function (r) {
+          SIM.push({ de: "loja", texto: r.resposta || "(sem resposta)", transferir: r.transferir, motivo: r.motivo, nota: r.nota_interna });
+        }).catch(fail).then(function () {
+          chat.innerHTML = SIM.map(iaBubble).join("");
+          chat.scrollTop = chat.scrollHeight;
+          $("button", sim).disabled = false;
+          sim.text.focus();
+        });
+      });
+      $("#ia-clear").addEventListener("click", function () { SIM = []; renderIa(); });
+    }).catch(fail);
+  }
+
+  /* Sugestão da IA na ficha do lead */
+  function aiSection(l) {
+    var d = null;
+    try { d = l.ai_draft ? JSON.parse(l.ai_draft) : null; } catch (e) { d = null; }
+    return '<div class="d-sec" id="ia-sec"><h3>Atendimento com IA</h3>' +
+      '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (l.ai_pausada
+        ? '⏸️ IA pausada neste lead (um vendedor assumiu). <button class="link" data-ia-ativa="1">Reativar IA</button>'
+        : '🤖 IA ativa neste lead. <button class="link" data-ia-ativa="0">Pausar IA</button>') + "</p>" +
+      (d ? '<div class="ia-draft">' +
+          '<p class="muted" style="font-size:12px;margin:0 0 6px">Sugestão de ' + fmtDate(l.ai_draft_at, true) +
+            (d.transferir ? ' · <strong style="color:var(--danger)">recomenda passar para um vendedor' + (d.motivo ? ": " + esc(d.motivo) : "") + "</strong>" : "") + "</p>" +
+          '<textarea id="ia-draft-text" rows="4">' + esc(d.resposta) + "</textarea>" +
+          (d.nota_interna ? '<p class="muted" style="font-size:12px;margin:6px 0 0">Nota da IA: ' + esc(d.nota_interna) + "</p>" : "") +
+          '<p style="margin:8px 0 0"><button class="btn btn--wa btn--sm" id="ia-send">Enviar no WhatsApp</button> ' +
+          '<button class="btn btn--ghost btn--sm" id="ia-copy">Copiar</button> ' +
+          '<button class="btn btn--ghost btn--sm" id="ia-discard">Descartar</button></p></div>' : "") +
+      '<p style="margin:8px 0 0"><button class="btn btn--ghost btn--sm" id="ia-suggest">' + (d ? "Gerar outra sugestão" : "Sugerir resposta com IA") + '</button> <span class="form-msg" id="ia-msg"></span></p></div>';
+  }
+
+  function bindAi(l) {
+    var reload = function () { return loadLeads().then(function () { render(); openLead(l.id); }); };
+    $$("[data-ia-ativa]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        api("/leads/" + l.id + "/ia/ativa", { method: "POST", body: { ativa: b.getAttribute("data-ia-ativa") === "1" } }).then(reload).catch(fail);
+      });
+    });
+    $("#ia-suggest").addEventListener("click", function () {
+      var b = this, msg = $("#ia-msg");
+      b.disabled = true; msg.style.color = "var(--soft)"; msg.textContent = "Pensando…";
+      api("/leads/" + l.id + "/ia/sugerir", { method: "POST", body: {} }).then(reload)
+        .catch(function (err) { b.disabled = false; msg.style.color = "var(--danger)"; msg.textContent = err.serverMessage || ERR[err.code] || err.code; });
+    });
+    var send = $("#ia-send");
+    if (!send) return;
+    send.addEventListener("click", function () {
+      send.disabled = true;
+      api("/leads/" + l.id + "/ia/enviar", { method: "POST", body: { text: $("#ia-draft-text").value } })
+        .then(function () { toast("Mensagem enviada"); return reload(); })
+        .catch(function (err) { send.disabled = false; fail(err); });
+    });
+    $("#ia-copy").addEventListener("click", function () {
+      var t = $("#ia-draft-text").value;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast("Copiado — cole no WhatsApp"); })
+        .catch(function () { $("#ia-draft-text").select(); document.execCommand("copy"); toast("Copiado"); });
+    });
+    $("#ia-discard").addEventListener("click", function () {
+      api("/leads/" + l.id + "/ia/descartar", { method: "POST", body: {} }).then(reload).catch(fail);
+    });
+  }
+
   /* ---------------- integração Loja Tray ---------------- */
   function renderTray(result) {
     var view = $("#view");
@@ -869,6 +1014,7 @@
           (l.email ? '<a class="btn btn--ghost" href="mailto:' + esc(l.email) + '">E-mail</a>' : "") +
           '<a class="btn btn--ghost" href="https://www.prontoartes.com.br" target="_blank" rel="noopener">Loja Tray</a>' +
         "</div>" +
+        aiSection(l) +
 
         '<form id="lead-edit">' +
           '<div class="grid2">' +
@@ -922,7 +1068,7 @@
         '<div class="d-sec"><h3>Histórico e notas</h3>' +
           '<form class="note-form" id="note-form"><textarea name="text" placeholder="Registrar conversa, proposta enviada, objeção…" required></textarea><button class="btn btn--primary">Anotar</button></form>' +
           '<ul class="timeline">' + d.events.map(function (ev) {
-            var who = ev.type === "tray" ? " · 🛒 Loja Tray" : ev.type === "whatsapp_in" ? " · 💬 Cliente" : ev.type === "whatsapp_out" ? " · 🏪 Loja (WhatsApp)" : ev.user ? " · " + esc(ev.user) : "";
+            var who = ev.type === "ia" ? " · 🤖 IA" : ev.type === "whatsapp_out" && ev.user === "IA" ? " · 🤖 IA (WhatsApp)" : ev.type === "tray" ? " · 🛒 Loja Tray" : ev.type === "whatsapp_in" ? " · 💬 Cliente" : ev.type === "whatsapp_out" ? " · 🏪 Loja (WhatsApp)" : ev.user ? " · " + esc(ev.user) : "";
             return '<li class="t-' + esc(ev.type) + '"><time>' + fmtDate(ev.created_at, true) + who + "</time>" + esc(ev.text) + "</li>";
           }).join("") + "</ul></div>" +
 
@@ -955,6 +1101,7 @@
       });
 
       bindWaSend(l);
+      bindAi(l);
 
       $("#contact-edit").addEventListener("submit", function (e) {
         e.preventDefault();

@@ -133,6 +133,7 @@ async function handleInbound(env, m, contact, deps) {
   await env.DB.prepare("UPDATE leads SET last_inbound_at = ?, updated_at = ? WHERE id = ?").bind(at, now(), leadId).run();
   await deps.logEvent(env, leadId, "whatsapp_in", text);
   await markProcessed(env, m.id, leadId, "in");
+  if (m.type !== "reaction") deps.onInbound?.(leadId, at);
 }
 
 /** Mensagem enviada pela equipe no WhatsApp Business App (coexistência). */
@@ -152,6 +153,7 @@ async function handleEcho(env, m, deps) {
   ).bind(at, at, now(), lead.id).run();
   await deps.logEvent(env, lead.id, "whatsapp_out", messageText(m).slice(0, 1000));
   await markProcessed(env, m.id, lead.id, "out");
+  await deps.onHumanReply?.(lead.id);
 }
 
 export async function handleWhatsAppWebhook(request, env, deps) {

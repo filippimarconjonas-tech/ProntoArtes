@@ -228,15 +228,18 @@ export async function trayStatus(env, origin) {
 
 export async function saveTraySettings(env, body) {
   const vals = {};
-  if (body.api_address !== undefined) {
-    let a = String(body.api_address || "").trim().replace(/\/+$/, "");
-    if (a && !/^https:\/\/[^\s]+\/web_api$/i.test(a)) throw new TrayError("api_address_invalido", "O endereço da API deve começar com https:// e terminar em /web_api.");
-    vals.tray_api_address = a || null;
-  }
-  if (body.store_url !== undefined) {
-    const u = String(body.store_url || "").trim().replace(/\/+$/, "");
-    if (u && !/^https:\/\/[a-z0-9.-]+$/i.test(u)) throw new TrayError("store_url_invalida", "O endereço da loja deve ser como https://www.prontoartes.com.br");
-    vals.tray_store_url = u || null;
+  // Campos vazios mantêm o valor salvo (o api_address chega sozinho pela autorização;
+  // um formulário aberto antes de autorizar não pode apagá-lo)
+  const a = String(body.api_address || "").trim().replace(/\/+$/, "");
+  if (a && !/^https:\/\/[^\s]+\/web_api$/i.test(a)) throw new TrayError("api_address_invalido", "O endereço da API deve começar com https:// e terminar em /web_api.");
+  if (a) vals.tray_api_address = a;
+  const u = String(body.store_url || "").trim().replace(/\/+$/, "");
+  if (u && !/^https:\/\/[a-z0-9.-]+$/i.test(u)) throw new TrayError("store_url_invalida", "O endereço da loja deve ser como https://www.prontoartes.com.br");
+  if (u) vals.tray_store_url = u;
+  const cur = await getSettings(env, ["tray_webhook_key", "tray_store_url"]);
+  // Trocou de loja (ex.: teste → produção): a autorização e o api_address antigos não valem para a nova
+  if (u && cur.tray_store_url && u !== cur.tray_store_url) {
+    Object.assign(vals, { tray_api_address: null, tray_code: null, tray_access_token: null, tray_refresh_token: null, tray_token_expires: null });
   }
   for (const [field, key] of [["consumer_key", "tray_consumer_key"], ["consumer_secret", "tray_consumer_secret"]]) {
     const v = String(body[field] || "").trim();
@@ -244,7 +247,6 @@ export async function saveTraySettings(env, body) {
   }
   const code = String(body.code || "").trim();
   if (code) Object.assign(vals, { tray_code: code, tray_access_token: null, tray_refresh_token: null, tray_token_expires: null });
-  const cur = await getSettings(env, ["tray_webhook_key"]);
   if (!cur.tray_webhook_key) vals.tray_webhook_key = [...crypto.getRandomValues(new Uint8Array(18))].map((b) => b.toString(16).padStart(2, "0")).join("");
   await setSettings(env, vals);
 }

@@ -65,7 +65,7 @@ com os mais vendidos de cada linha (só quando o catálogo cobre ao menos 4 linh
 `/admin` › Loja Tray: endereço da API (`https://…/web_api`), consumer key/secret do aplicativo Tray e o `code` de autorização da loja.
 - Pedido aguardando pagamento → lead em *Aguardando pagamento*; pago → *Venda fechada (Site Tray)* com valor e nº do pedido;
   enviado/entregue → pós-venda. Cancelado só gera aviso no histórico.
-- Lead encontrado pelo nº do pedido, telefone ou e-mail. Cliente que já fechou outra venda gera nova oportunidade (recompra).
+- Cada pedido fica ligado ao seu lead (tabela `tray_orders`); pedido novo é ligado pelo telefone ou e-mail do cliente. Cliente que já fechou outra venda gera nova oportunidade (recompra). Reprocessar um pedido sem mudança de status não altera nada.
 - Notificações: `/api/tray/webhook?key=…` (URL exibida no painel). Pedidos são sempre relidos na API da Tray.
 
 ## Páginas legais

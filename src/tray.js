@@ -105,52 +105,62 @@ function classify(status) {
 }
 
 const POST_ORDER = ["pago", "separacao", "enviado", "entregue", "recompra"];
+const POST_LABEL = { pago: "Pedido pago", separacao: "Separação / produção", enviado: "Enviado", entregue: "Entregue" };
 
 /**
- * Aplica um pedido da Tray ao CRM. Idempotente: reprocessar o mesmo pedido não duplica nada.
+ * Aplica um pedido da Tray ao CRM. Idempotente: cada pedido fica ligado ao seu lead na tabela
+ * tray_orders, e reprocessar um pedido sem mudança de status não altera nada.
  */
 async function applyOrder(env, orderId, deps) {
   const o = (await api(env, `/orders/${encodeURIComponent(orderId)}`))?.Order;
   if (!o) throw new TrayError("pedido_nao_encontrado", `Pedido ${orderId} não encontrado na Tray.`);
-  const c = o.customer_id ? (await api(env, `/customers/${encodeURIComponent(o.customer_id)}`).catch(() => null))?.Customer : null;
 
   const pedido = String(o.id);
   const total = Number(o.total) || null;
   const status = o.status || "";
   const cls = classify(status);
-  const phone = normalizePhone(c?.cellphone || c?.phone || "");
-  const email = (c?.email || "").trim().toLowerCase();
 
-  // 1º: lead que já tem este pedido; 2º: telefone; 3º: e-mail
-  let lead = await env.DB.prepare("SELECT * FROM leads WHERE pedido_tray = ? ORDER BY id DESC LIMIT 1").bind(pedido).first();
-  if (!lead && phone.length >= 12) lead = await env.DB.prepare("SELECT * FROM leads WHERE whatsapp = ? ORDER BY id DESC LIMIT 1").bind(phone).first();
-  if (!lead && email) lead = await env.DB.prepare("SELECT * FROM leads WHERE lower(email) = ? ORDER BY id DESC LIMIT 1").bind(email).first();
-
-  // Cliente que já fechou outra venda: este pedido é uma recompra e vira nova oportunidade
-  let recompra = false;
-  if (lead && lead.stage === "ganho" && lead.pedido_tray && lead.pedido_tray !== pedido) {
-    recompra = true;
-    lead = null;
-  }
+  // 1º: pedido já ligado a um lead (que ainda existe)
+  const map = await env.DB.prepare("SELECT lead_id, status FROM tray_orders WHERE pedido = ?").bind(pedido).first();
+  let lead = map ? await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(map.lead_id).first() : null;
+  if (lead && map.status === status) return { pedido, status, lead_id: lead.id, acao: "sem mudanças" };
 
   if (!lead) {
     if (cls.kind === "cancelado" || cls.kind === "outro") return { pedido, status, acao: "ignorado (sem lead e pedido não pago)" };
-    if (phone.length < 12) return { pedido, status, acao: "ignorado (cliente sem telefone)" };
-    const r = await deps.upsertLead(env, {
-      nome: c?.name || "Cliente Tray",
-      whatsapp: phone,
-      email: email || null,
-      cidade: [c?.city, c?.state].filter(Boolean).join("/") || null,
-      origem: recompra ? "Recompra na loja Tray" : "Loja Tray (comprou direto no site)"
-    }, { canal: "tray" });
-    lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(r.id).first();
+    const c = o.customer_id ? (await api(env, `/customers/${encodeURIComponent(o.customer_id)}`).catch(() => null))?.Customer : null;
+    const phone = normalizePhone(c?.cellphone || c?.phone || "");
+    const email = (c?.email || "").trim().toLowerCase();
+
+    // 2º: telefone; 3º: e-mail
+    if (phone.length >= 12) lead = await env.DB.prepare("SELECT * FROM leads WHERE whatsapp = ? ORDER BY id DESC LIMIT 1").bind(phone).first();
+    if (!lead && email) lead = await env.DB.prepare("SELECT * FROM leads WHERE lower(email) = ? ORDER BY id DESC LIMIT 1").bind(email).first();
+
+    // Cliente que já fechou outra venda: este pedido é uma recompra e vira nova oportunidade
+    let recompra = false;
+    if (lead && lead.stage === "ganho" && lead.pedido_tray && lead.pedido_tray !== pedido) {
+      recompra = true;
+      lead = null;
+    }
+
+    if (!lead) {
+      if (phone.length < 12) return { pedido, status, acao: "ignorado (cliente sem telefone)" };
+      const r = await deps.upsertLead(env, {
+        nome: c?.name || "Cliente Tray",
+        whatsapp: phone,
+        email: email || null,
+        cidade: [c?.city, c?.state].filter(Boolean).join("/") || null,
+        origem: recompra ? "Recompra na loja Tray" : "Loja Tray (comprou direto no site)"
+      }, { canal: "tray" });
+      lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(r.id).first();
+    }
   }
 
   const at = now();
   const sets = {};
   const events = [];
-  if (lead.pedido_tray !== pedido) { sets.pedido_tray = pedido; events.push(`Pedido Tray nº ${pedido} vinculado (${status}).`); }
-  if (total && lead.valor !== total) sets.valor = total;
+  if (!map || map.lead_id !== lead.id) events.push(`Pedido Tray nº ${pedido} vinculado (${status}).`);
+  if (cls.kind !== "cancelado" && lead.pedido_tray !== pedido) sets.pedido_tray = pedido;
+  if (total && cls.kind !== "cancelado" && lead.valor !== total) sets.valor = total;
 
   if (cls.kind === "aguardando" && !["pagamento", "ganho"].includes(lead.stage)) {
     Object.assign(sets, { pipeline: "vendas", stage: "pagamento", stage_changed_at: at, canal_fechamento: "site_tray" });
@@ -165,19 +175,22 @@ async function applyOrder(env, orderId, deps) {
     const cur = POST_ORDER.indexOf(lead.post_stage || "");
     if (POST_ORDER.indexOf(cls.post) > cur) {
       sets.post_stage = cls.post;
-      if (lead.stage === "ganho") events.push(`Pós-venda atualizado pela Tray: ${status}.`);
+      events.push(`Pós-venda: ${POST_LABEL[cls.post]} (pedido ${pedido}: ${status}).`);
     }
   }
 
-  if (cls.kind === "cancelado" && lead.pedido_tray === pedido) {
-    events.push(`Pedido ${pedido} cancelado na Tray (${status}). Revise a etapa do lead.`);
-  }
+  if (cls.kind === "cancelado") events.push(`Pedido ${pedido} cancelado na Tray (${status}). Revise a etapa do lead.`);
+  else if (map && map.status !== status && !events.length) events.push(`Pedido ${pedido}: status na Tray mudou para ${status}.`);
 
   if (Object.keys(sets).length) {
     sets.updated_at = at;
     const keys = Object.keys(sets);
     await env.DB.prepare(`UPDATE leads SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...keys.map((k) => sets[k]), lead.id).run();
   }
+  await env.DB.prepare(
+    `INSERT INTO tray_orders (pedido, lead_id, status) VALUES (?, ?, ?)
+     ON CONFLICT(pedido) DO UPDATE SET lead_id = excluded.lead_id, status = excluded.status, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`
+  ).bind(pedido, lead.id, status).run();
   for (const text of events) await deps.logEvent(env, lead.id, "tray", text, "Tray");
   return { pedido, status, lead_id: lead.id, acao: events.length ? events.join(" ") : "sem mudanças" };
 }
@@ -294,13 +307,14 @@ export async function syncTray(env, deps, limit = 30) {
     return { ok: false, steps, pedidos: [] };
   }
 
+  // Do mais antigo para o mais novo: a recompra segue a ordem real das compras
   const pedidos = [];
-  for (const o of orders) {
+  for (const o of [...orders].reverse()) {
     try { pedidos.push(await applyOrder(env, o.id, deps)); }
     catch (err) { pedidos.push({ pedido: String(o.id), status: o.status, acao: "erro: " + err.message }); }
   }
   await setSettings(env, { tray_last_sync: now() });
-  return { ok: true, steps, pedidos };
+  return { ok: true, steps, pedidos: pedidos.reverse() };
 }
 
 export { TrayError };

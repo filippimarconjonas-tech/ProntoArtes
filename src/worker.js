@@ -504,6 +504,7 @@ async function handleAdminApi(request, env, url) {
     if (method === "DELETE") {
       await env.DB.batch([
         env.DB.prepare("DELETE FROM lead_events WHERE lead_id = ?").bind(id),
+        env.DB.prepare("DELETE FROM tray_orders WHERE lead_id = ?").bind(id),
         env.DB.prepare("DELETE FROM leads WHERE id = ?").bind(id)
       ]);
       return json({ ok: true });

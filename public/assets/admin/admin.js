@@ -788,6 +788,7 @@
           row("Situação", st.autorizada ? "✅ Loja autorizada" : "⏳ Aguardando autorização") +
           row("Última sincronização", st.ultima_sincronizacao ? fmtDate(st.ultima_sincronizacao, true) : "nunca") +
           row("Última notificação", st.ultima_notificacao ? fmtDate(st.ultima_notificacao, true) : "nenhuma ainda") +
+          (st.ultimo_erro ? row("Último erro", "Pedido " + st.ultimo_erro.pedido + " em " + fmtDate(st.ultimo_erro.em, true) + ": " + st.ultimo_erro.erro) : "") +
         "</dl>" +
         '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Pedido criado na loja → lead em <strong>Aguardando pagamento</strong>. Pagamento aprovado → <strong>Venda fechada (Site Tray)</strong> com valor e nº do pedido, e o pós-venda acompanha o status (enviado, entregue). ' +
         "O lead é encontrado pelo telefone ou e-mail do cliente; quem comprou direto na loja vira lead com origem “Loja Tray”.</p></div>" +
@@ -809,7 +810,7 @@
         '<div class="panel"><h3>URL de notificação (webhook)</h3>' +
           (st.webhook_url ? '<p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.webhook_url) + "</p>" : '<p class="empty">Gerada ao salvar as credenciais.</p>') +
           (st.callback_url ? '<p class="muted" style="font-size:12.5px;margin:12px 0 4px">URL de retorno (callback) — se o cadastro do aplicativo na Tray pedir:</p><p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.callback_url) + "</p>" : "") +
-          '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o botão de sincronizar continua disponível como reforço.</p></div>' +
+          '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o CRM também sincroniza sozinho a cada 30 minutos, e o botão de sincronizar continua disponível.</p></div>' +
 
         (result ? '<div class="panel panel--wide"><h3>Resultado</h3><ul class="timeline">' + result.steps.map(function (s) {
           return '<li class="' + (s.ok ? "t-etapa" : "t-nota") + '"><time>' + (s.ok ? "✅" : "❌") + " " + esc(s.label) + "</time>" + esc(s.detail) + "</li>";

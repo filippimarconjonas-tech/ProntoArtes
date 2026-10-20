@@ -66,7 +66,8 @@ com os mais vendidos de cada linha (só quando o catálogo cobre ao menos 4 linh
 - Pedido aguardando pagamento → lead em *Aguardando pagamento*; pago → *Venda fechada (Site Tray)* com valor e nº do pedido;
   enviado/entregue → pós-venda. Cancelado só gera aviso no histórico.
 - Cada pedido fica ligado ao seu lead (tabela `tray_orders`); pedido novo é ligado pelo telefone ou e-mail do cliente. Cliente que já fechou outra venda gera nova oportunidade (recompra). Reprocessar um pedido sem mudança de status não altera nada.
-- Notificações: `/api/tray/webhook?key=…` (URL exibida no painel). Pedidos são sempre relidos na API da Tray.
+- Notificações: `/api/tray/webhook?key=…` (URL exibida no painel). Responde 200 na hora e processa em seguida; pedidos são sempre relidos na API da Tray.
+- Sincronização automática a cada 30 minutos (Cron Trigger em `wrangler.jsonc`) recupera notificações que falharam. O último erro aparece no painel.
 
 ## Páginas legais
 `/privacidade` e `/exclusao-de-dados` — usar nos campos de URL do app na Meta.

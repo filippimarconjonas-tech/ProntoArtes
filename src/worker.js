@@ -15,7 +15,7 @@ import {
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
-import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray } from "./tray.js";
+import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
 import {
@@ -531,6 +531,11 @@ async function serveAdminPage(request, env, url) {
 }
 
 export default {
+  // Cron Trigger (wrangler.jsonc): sincroniza os pedidos da Tray a cada 30 minutos
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(scheduledTraySync(env, { upsertLead, logEvent }).catch((err) => console.error("tray_cron_error", err?.message)));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const p = url.pathname;
@@ -544,7 +549,7 @@ export default {
     if (tcb) return handleTrayCallback(request, env, tcb[1]);
     if (p === "/api/tray/webhook") {
       try {
-        return await handleTrayWebhook(request, env, { upsertLead, logEvent });
+        return await handleTrayWebhook(request, env, { upsertLead, logEvent, waitUntil: (p) => ctx.waitUntil(p) });
       } catch (err) {
         console.error("tray_error", err?.stack || err?.message);
         return new Response("Erro", { status: 500 });

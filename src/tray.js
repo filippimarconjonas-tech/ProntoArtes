@@ -44,7 +44,7 @@ async function trayFetch(url, init = {}) {
   try { data = JSON.parse(text); } catch { /* resposta não-JSON */ }
   if (!res.ok) {
     const msg = data?.message || data?.causes?.join?.(" ") || data?.error || text.slice(0, 200) || `HTTP ${res.status}`;
-    throw new TrayError("erro_tray", `Tray respondeu ${res.status}: ${msg}`);
+    throw Object.assign(new TrayError("erro_tray", `Tray respondeu ${res.status}: ${msg}`), { status: res.status });
   }
   return data;
 }
@@ -82,7 +82,18 @@ async function accessToken(env) {
   throw new TrayError("tray_nao_autorizada", "A loja ainda não foi autorizada. Preencha as credenciais e clique em Conectar.");
 }
 
-async function api(env, path) {
+/**
+ * O plano gratuito do Workers permite 50 chamadas externas por execução.
+ * A sincronização reserva uma folga e conta cada chamada à Tray.
+ */
+const LIMITE_CHAMADAS = 44;
+class SemOrcamento extends Error {}
+
+async function api(env, path, orcamento) {
+  if (orcamento) {
+    if (orcamento.resta <= 0) throw new SemOrcamento();
+    orcamento.resta--;
+  }
   const { cfg, token } = await accessToken(env);
   const sep = path.includes("?") ? "&" : "?";
   return trayFetch(`${cfg.api}${path}${sep}access_token=${encodeURIComponent(token)}`);
@@ -111,23 +122,40 @@ const POST_LABEL = { pago: "Pedido pago", separacao: "Separação / produção",
  * Aplica um pedido da Tray ao CRM. Idempotente: cada pedido fica ligado ao seu lead na tabela
  * tray_orders, e reprocessar um pedido sem mudança de status não altera nada.
  */
-async function applyOrder(env, orderId, deps) {
-  const o = (await api(env, `/orders/${encodeURIComponent(orderId)}`))?.Order;
+async function applyOrder(env, orderId, deps, { statusLista = null, orcamento = null } = {}) {
+  // 1º: pedido já ligado a um lead (que ainda existe)
+  const map = await env.DB.prepare("SELECT lead_id, status FROM tray_orders WHERE pedido = ?").bind(String(orderId)).first();
+  let lead = map ? await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(map.lead_id).first() : null;
+  // A lista de pedidos já traz o status: pedido conhecido sem mudança não gasta chamada à Tray
+  if (lead && statusLista != null && map.status === statusLista) return { pedido: String(orderId), status: statusLista, lead_id: lead.id, acao: "sem mudanças" };
+
+  // "Pedido completo" já traz o cliente: uma chamada por pedido. Se a loja não tiver essa consulta,
+  // volta para pedido + cliente (e não tenta de novo nesta sincronização).
+  let full = null;
+  if (!orcamento?.semCompleto) {
+    try { full = await api(env, `/orders/${encodeURIComponent(orderId)}/complete`, orcamento); }
+    catch (err) {
+      if (!(err instanceof TrayError) || err.status !== 404) throw err;
+      if (orcamento) orcamento.semCompleto = true;
+    }
+  }
+  if (!full?.Order) full = await api(env, `/orders/${encodeURIComponent(orderId)}`, orcamento);
+  const o = full?.Order;
   if (!o) throw new TrayError("pedido_nao_encontrado", `Pedido ${orderId} não encontrado na Tray.`);
 
   const pedido = String(o.id);
   const total = Number(o.total) || null;
   const status = o.status || "";
   const cls = classify(status);
-
-  // 1º: pedido já ligado a um lead (que ainda existe)
-  const map = await env.DB.prepare("SELECT lead_id, status FROM tray_orders WHERE pedido = ?").bind(pedido).first();
-  let lead = map ? await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(map.lead_id).first() : null;
   if (lead && map.status === status) return { pedido, status, lead_id: lead.id, acao: "sem mudanças" };
 
   if (!lead) {
     if (cls.kind === "cancelado" || cls.kind === "outro") return { pedido, status, acao: "ignorado (sem lead e pedido não pago)" };
-    const c = o.customer_id ? (await api(env, `/customers/${encodeURIComponent(o.customer_id)}`).catch(() => null))?.Customer : null;
+    let c = o.Customer || full.Customer || null;
+    if (!c && o.customer_id) {
+      try { c = (await api(env, `/customers/${encodeURIComponent(o.customer_id)}`, orcamento))?.Customer || null; }
+      catch (err) { if (err instanceof SemOrcamento) throw err; }
+    }
     const phone = normalizePhone(c?.cellphone || c?.phone || "");
     const email = (c?.email || "").trim().toLowerCase();
 
@@ -309,10 +337,17 @@ export async function syncTray(env, deps, limit = 30) {
 
   // Do mais antigo para o mais novo: a recompra segue a ordem real das compras
   const pedidos = [];
+  const orcamento = { resta: LIMITE_CHAMADAS - 2 }; // token + lista
+  let pendentes = 0;
   for (const o of [...orders].reverse()) {
-    try { pedidos.push(await applyOrder(env, o.id, deps)); }
-    catch (err) { pedidos.push({ pedido: String(o.id), status: o.status, acao: "erro: " + err.message }); }
+    if (pendentes) { pendentes++; pedidos.push({ pedido: String(o.id), status: o.status, acao: "fica para a próxima sincronização" }); continue; }
+    try { pedidos.push(await applyOrder(env, o.id, deps, { statusLista: o.status ?? null, orcamento })); }
+    catch (err) {
+      if (err instanceof SemOrcamento) { pendentes = 1; pedidos.push({ pedido: String(o.id), status: o.status, acao: "fica para a próxima sincronização" }); }
+      else pedidos.push({ pedido: String(o.id), status: o.status, acao: "erro: " + err.message });
+    }
   }
+  if (pendentes) steps.push({ label: "Limite por sincronização", ok: false, detail: `${pendentes} pedido(s) ficaram para depois: clique em sincronizar de novo para continuar.` });
   await setSettings(env, { tray_last_sync: now() });
   return { ok: true, steps, pedidos: pedidos.reverse() };
 }

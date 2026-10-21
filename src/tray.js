@@ -12,7 +12,7 @@ import { normalizePhone } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
 
 const KEYS = ["tray_store_url", "tray_api_address", "tray_consumer_key", "tray_consumer_secret", "tray_code",
-  "tray_access_token", "tray_refresh_token", "tray_token_expires", "tray_webhook_key", "tray_last_sync", "tray_last_webhook"];
+  "tray_access_token", "tray_refresh_token", "tray_token_expires", "tray_webhook_key", "tray_last_sync", "tray_last_webhook", "tray_last_error"];
 
 const now = () => new Date().toISOString();
 
@@ -29,7 +29,8 @@ async function trayConfig(env) {
     expires: s.tray_token_expires || "",
     webhookKey: s.tray_webhook_key || "",
     lastSync: s.tray_last_sync || null,
-    lastWebhook: s.tray_last_webhook || null
+    lastWebhook: s.tray_last_webhook || null,
+    lastError: (() => { try { return s.tray_last_error ? JSON.parse(s.tray_last_error) : null; } catch { return null; } })()
   };
 }
 
@@ -122,13 +123,37 @@ const POST_LABEL = { pago: "Pedido pago", separacao: "Separação / produção",
  * Aplica um pedido da Tray ao CRM. Idempotente: cada pedido fica ligado ao seu lead na tabela
  * tray_orders, e reprocessar um pedido sem mudança de status não altera nada.
  */
-async function applyOrder(env, orderId, deps, { statusLista = null, orcamento = null } = {}) {
-  // 1º: pedido já ligado a um lead (que ainda existe)
-  const map = await env.DB.prepare("SELECT lead_id, status FROM tray_orders WHERE pedido = ?").bind(String(orderId)).first();
-  let lead = map ? await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(map.lead_id).first() : null;
-  // A lista de pedidos já traz o status: pedido conhecido sem mudança não gasta chamada à Tray
-  if (lead && statusLista != null && map.status === statusLista) return { pedido: String(orderId), status: statusLista, lead_id: lead.id, acao: "sem mudanças" };
+const PROCESSANDO = "__processando";
 
+async function applyOrder(env, orderId, deps, opts = {}) {
+  const id = String(orderId);
+  // 1º: pedido já ligado a um lead (que ainda existe)
+  const map = await env.DB.prepare("SELECT lead_id, status FROM tray_orders WHERE pedido = ?").bind(id).first();
+  const lead = map?.lead_id ? await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(map.lead_id).first() : null;
+  // A lista de pedidos já traz o status: pedido conhecido sem mudança não gasta chamada à Tray
+  if (lead && opts.statusLista != null && map.status === opts.statusLista) return { pedido: id, status: opts.statusLista, lead_id: lead.id, acao: "sem mudanças" };
+  if (lead) return applyOrderInner(env, id, deps, opts, map, lead);
+
+  // Pedido sem lead: reserva o pedido antes de criar o lead. A Tray manda "insert" e "update" do mesmo
+  // pedido quase juntos; só quem reservar processa (reserva com mais de 2 min é considerada abandonada).
+  const abandonada = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const r = await env.DB.prepare(
+    `INSERT INTO tray_orders (pedido, lead_id, status) VALUES (?, 0, ?)
+     ON CONFLICT(pedido) DO UPDATE SET lead_id = 0, status = excluded.status, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE tray_orders.status <> excluded.status OR tray_orders.updated_at < ?`
+  ).bind(id, PROCESSANDO, abandonada).run();
+  if (!r.meta?.changes) return { pedido: id, status: opts.statusLista || "", acao: "já em processamento por outra notificação" };
+  try {
+    const out = await applyOrderInner(env, id, deps, opts, null, null);
+    if (!out.lead_id) await env.DB.prepare("DELETE FROM tray_orders WHERE pedido = ? AND lead_id = 0").bind(id).run();
+    return out;
+  } catch (err) {
+    await env.DB.prepare("DELETE FROM tray_orders WHERE pedido = ? AND lead_id = 0").bind(id).run();
+    throw err;
+  }
+}
+
+async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, map, lead) {
   // "Pedido completo" já traz o cliente: uma chamada por pedido. Se a loja não tiver essa consulta,
   // volta para pedido + cliente (e não tenta de novo nesta sincronização).
   let full = null;
@@ -181,6 +206,13 @@ async function applyOrder(env, orderId, deps, { statusLista = null, orcamento = 
       }, { canal: "tray" });
       lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(r.id).first();
     }
+  }
+
+  if (map) {
+    // Outra notificação do mesmo pedido pode ter chegado junto: só uma aplica a mudança de status
+    const u = await env.DB.prepare("UPDATE tray_orders SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE pedido = ? AND status = ?")
+      .bind(status, pedido, map.status).run();
+    if (!u.meta?.changes) return { pedido, status, lead_id: lead.id, acao: "já atualizado por outra notificação" };
   }
 
   const at = now();
@@ -238,14 +270,17 @@ export async function handleTrayWebhook(request, env, deps) {
   const data = ct.includes("json") ? await request.json().catch(() => ({})) : Object.fromEntries(await request.formData().catch(() => new FormData()));
   await setSettings(env, { tray_last_webhook: now() });
 
+  // A Tray exige resposta 200 em toda notificação: responde na hora e processa em seguida.
+  // Se falhar, o erro fica registrado no painel e a sincronização automática (a cada 30 min) recupera o pedido.
   if (String(data.scope_name || "").toLowerCase() === "order" && data.scope_id) {
-    try {
-      const r = await applyOrder(env, data.scope_id, deps);
-      console.log("tray_order", JSON.stringify(r));
-    } catch (err) {
-      console.error("tray_webhook_error", err.message);
-      return new Response("Erro", { status: 500 }); // a Tray tenta de novo
-    }
+    const pedido = String(data.scope_id);
+    const job = applyOrder(env, pedido, deps)
+      .then((r) => console.log("tray_order", JSON.stringify(r)))
+      .catch(async (err) => {
+        console.error("tray_webhook_error", pedido, err.message);
+        await setSettings(env, { tray_last_error: JSON.stringify({ pedido, erro: err.message, em: now() }) }).catch(() => {});
+      });
+    if (deps.waitUntil) deps.waitUntil(job); else await job;
   }
   return new Response("OK");
 }
@@ -263,7 +298,8 @@ export async function trayStatus(env, origin) {
     token_expira: cfg.expires || null,
     webhook_url: cfg.webhookKey ? `${origin}/api/tray/webhook?key=${cfg.webhookKey}` : null,
     ultima_sincronizacao: cfg.lastSync,
-    ultima_notificacao: cfg.lastWebhook
+    ultima_notificacao: cfg.lastWebhook,
+    ultimo_erro: cfg.lastError
   };
 }
 
@@ -353,3 +389,12 @@ export async function syncTray(env, deps, limit = 30) {
 }
 
 export { TrayError };
+
+/** Sincronização automática (Cron Trigger do Worker): recupera pedidos cujas notificações falharam. */
+export async function scheduledTraySync(env, deps) {
+  const cfg = await trayConfig(env);
+  if (!cfg.api || !(cfg.token || cfg.refresh)) return; // loja ainda não autorizada
+  const r = await syncTray(env, deps);
+  const mudou = r.pedidos.filter((p) => p.lead_id && p.acao !== "sem mudanças").length;
+  console.log("tray_cron", JSON.stringify({ ok: r.ok, pedidos: r.pedidos.length, mudou, passos: r.steps.filter((s) => !s.ok) }));
+}

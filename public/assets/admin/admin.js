@@ -905,6 +905,7 @@
             row("Categorias", num(r.categorias)) +
             row("Já existiam no catálogo", num(r.ja_no_catalogo)) +
             (r.gravado ? row("Gravado", "✅ sim" + (r.ocultados ? " · " + num(r.ocultados) + " produto(s) saíram da vitrine" : "")) : row("Gravado", "não (só leitura)")) +
+            (r.gravado ? row("Descrições", num(r.descricoes_buscadas) + " buscada(s) agora" + (r.sem_descricao ? " · " + num(r.sem_descricao) + " ainda sem descrição (completa nas próximas atualizações)" : " · todas completas")) : "") +
             "</dl>" +
             (r.amostra && r.amostra.length ? '<details style="margin-top:8px"><summary class="link">Ver amostra e campos recebidos</summary><pre style="white-space:pre-wrap;font-size:11.5px;background:#faf7f3;padding:8px;border-radius:8px;max-height:320px;overflow:auto">' +
               esc(JSON.stringify({ campos: r.campos, amostra: r.amostra }, null, 2)) + "</pre></details>" : "");

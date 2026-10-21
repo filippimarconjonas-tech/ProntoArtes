@@ -428,11 +428,13 @@ function produtoDaTray(p, categorias) {
     promo_fim: dataTray(p.end_promotion),
     estoque: numero(p.stock),
     disponivel: "available" in p ? (sim(p.available) ? 1 : 0) : 1,
-    exibir: "display" in p ? (sim(p.display) ? 1 : 0) : 1,
+    // "Exibir na loja" da planilha = available_in_store na API
+    exibir: "available_in_store" in p ? (sim(p.available_in_store) ? 1 : 0) : "display" in p ? (sim(p.display) ? 1 : 0) : 1,
     peso_g: numero(p.weight),
     comprimento: numero(p.length), largura: numero(p.width), altura: numero(p.height),
     vendidos: numero(p.quantity_sold), // nem toda loja devolve; se faltar, mantém o valor atual
-    descricao: htmlToText(p.description),
+    // A listagem da Tray não traz a descrição: null mantém a descrição já salva
+    descricao: "description" in p ? htmlToText(p.description) : null,
     url: p.url?.https || p.url?.http || null,
     imagens: JSON.stringify([...new Set(imagens)].slice(0, 8))
   };
@@ -494,7 +496,8 @@ export async function syncProdutosTray(env, { gravar = false } = {}) {
 
   const cols = Object.keys(itens[0] || {});
   if (cols.length) {
-    const upd = cols.filter((c) => c !== "id").map((c) => (c === "vendidos" ? "vendidos = COALESCE(excluded.vendidos, products.vendidos)" : `${c} = excluded.${c}`)).join(", ");
+    const manter = ["vendidos", "descricao"]; // campos que a Tray pode não devolver: mantém o valor atual
+    const upd = cols.filter((c) => c !== "id").map((c) => (manter.includes(c) ? `${c} = COALESCE(excluded.${c}, products.${c})` : `${c} = excluded.${c}`)).join(", ");
     const sql = `INSERT INTO products (${cols.join(", ")}, origem, updated_at) VALUES (${cols.map(() => "?").join(", ")}, 'api', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       ON CONFLICT(id) DO UPDATE SET ${upd}, origem = 'api', updated_at = excluded.updated_at`;
     for (let i = 0; i < itens.length; i += 50) {
@@ -507,8 +510,23 @@ export async function syncProdutosTray(env, { gravar = false } = {}) {
     const r = await env.DB.prepare(`UPDATE products SET exibir = 0 WHERE exibir = 1 AND id NOT IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(ids)).run();
     ocultados = r.meta?.changes || 0;
   }
+  // Descrição completa (GET /products/:id) dos produtos que ainda não têm, com as chamadas que sobraram
+  let descricoes = 0;
+  const { results: semDescricao } = await env.DB.prepare(
+    `SELECT id FROM products WHERE exibir = 1 AND (descricao IS NULL OR descricao = '') AND id IN (SELECT value FROM json_each(?)) LIMIT ?`
+  ).bind(JSON.stringify(ids), Math.max(0, orcamento.resta)).all();
+  for (const { id } of semDescricao) {
+    try {
+      const d = (await api(env, `/products/${encodeURIComponent(id)}`, orcamento))?.Product?.description;
+      await env.DB.prepare("UPDATE products SET descricao = ? WHERE id = ?").bind(htmlToText(d) || null, id).run();
+      descricoes++;
+    } catch (err) {
+      if (err instanceof SemOrcamento) break;
+    }
+  }
+  const faltam = await env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE exibir = 1 AND (descricao IS NULL OR descricao = '')").first();
   await setSettings(env, { tray_products_sync: now() });
-  return { ...resumo, gravado: true, ocultados };
+  return { ...resumo, gravado: true, ocultados, descricoes_buscadas: descricoes, sem_descricao: faltam?.n || 0 };
 }
 
 /** Atualização diária do catálogo (só na loja real e autorizada). */

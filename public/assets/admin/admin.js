@@ -861,11 +861,16 @@
       all.forEach(function (p) { cats[p.categoria || "Sem categoria"] = (cats[p.categoria || "Sem categoria"] || 0) + 1; });
       var last = all.reduce(function (m, p) { return p.updated_at > m ? p.updated_at : m; }, "");
       view.innerHTML =
-        '<div class="panels" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-bottom:14px">' +
+        '<div class="panels" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:14px">' +
           '<div class="panel"><h3>Importar planilha da Tray</h3>' +
             '<p class="muted" style="font-size:12.5px;margin:0 0 10px">No painel da Tray: <strong>Produtos › Exportar</strong> (todos os produtos, formato CSV). Envie o arquivo aqui: produtos novos são criados e os existentes têm preço, promoção, estoque e fotos atualizados.</p>' +
             '<input type="file" id="csv-file" accept=".csv,text/csv"> <button class="btn btn--primary btn--sm" id="csv-send" disabled>Importar</button>' +
             '<p class="form-msg" id="csv-msg"></p></div>' +
+          '<div class="panel"><h3>Catálogo pela API da Tray</h3>' +
+            '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Lê os produtos direto da loja (preço, promoção, estoque, fotos e descrição), sem planilha. Na loja real, o CRM também atualiza sozinho todo dia às 6h. ' +
+            '<strong>Testar leitura</strong> só mostra uma amostra, sem gravar.</p>' +
+            '<button class="btn btn--ghost btn--sm" id="tp-test">Testar leitura</button> <button class="btn btn--primary btn--sm" id="tp-save">Atualizar catálogo agora</button>' +
+            '<p class="form-msg" id="tp-msg"></p><div id="tp-out"></div></div>' +
           '<div class="panel"><h3>Resumo</h3><dl class="answers">' +
             row("Produtos", num(all.length)) +
             row("Visíveis na loja", num(all.filter(function (p) { return p.exibir && p.disponivel; }).length)) +
@@ -886,6 +891,30 @@
               (p.exibir && p.disponivel ? "✅" : "⛔") + "</td></tr>";
           }).join("") : '<tr><td colspan="7" class="empty">Nenhum produto ainda. Importe a planilha da Tray.</td></tr>') +
         "</tbody></table></div>";
+
+      function trayProdutos(gravar) {
+        var tmsg = $("#tp-msg"), out = $("#tp-out");
+        if (gravar && !confirm("Atualizar o catálogo com os produtos da Tray? Produtos que não existirem mais na loja saem da vitrine e das respostas da IA.")) return;
+        $("#tp-test").disabled = $("#tp-save").disabled = true;
+        tmsg.style.color = "var(--soft)"; tmsg.textContent = "Lendo produtos na Tray…"; out.innerHTML = "";
+        api("/products/tray", { method: "POST", body: { gravar: gravar } }).then(function (r) {
+          tmsg.style.color = ""; tmsg.textContent = "";
+          out.innerHTML = '<dl class="answers" style="margin-top:8px">' +
+            row("Loja", r.loja + (r.loja_de_teste ? " (loja de teste: nada é gravado)" : "")) +
+            row("Produtos lidos", num(r.lidos) + (r.total_na_tray != null ? " de " + num(r.total_na_tray) : "") + (r.completo ? "" : " (leitura parcial: limite de chamadas)")) +
+            row("Categorias", num(r.categorias)) +
+            row("Já existiam no catálogo", num(r.ja_no_catalogo)) +
+            (r.gravado ? row("Gravado", "✅ sim" + (r.ocultados ? " · " + num(r.ocultados) + " produto(s) saíram da vitrine" : "")) : row("Gravado", "não (só leitura)")) +
+            "</dl>" +
+            (r.amostra && r.amostra.length ? '<details style="margin-top:8px"><summary class="link">Ver amostra e campos recebidos</summary><pre style="white-space:pre-wrap;font-size:11.5px;background:#faf7f3;padding:8px;border-radius:8px;max-height:320px;overflow:auto">' +
+              esc(JSON.stringify({ campos: r.campos, amostra: r.amostra }, null, 2)) + "</pre></details>" : "");
+          if (r.gravado) { toast("Catálogo atualizado: " + r.lidos + " produtos"); setTimeout(renderProducts, 1500); }
+        }).catch(function (err) {
+          tmsg.style.color = ""; tmsg.textContent = err.serverMessage || ERR[err.code] || err.code;
+        }).then(function () { var a = $("#tp-test"), b = $("#tp-save"); if (a) a.disabled = false; if (b) b.disabled = false; });
+      }
+      $("#tp-test").addEventListener("click", function () { trayProdutos(false); });
+      $("#tp-save").addEventListener("click", function () { trayProdutos(true); });
 
       var file = $("#csv-file"), send = $("#csv-send"), msg = $("#csv-msg");
       file.addEventListener("change", function () { send.disabled = !file.files.length; });

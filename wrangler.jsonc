@@ -18,8 +18,9 @@
     }
   ],
   "observability": { "enabled": true },
-  // Sincroniza os pedidos da Tray a cada 30 minutos (recupera notificações que falharam)
-  "triggers": { "crons": ["*/30 * * * *"] }
+  // Pedidos da Tray a cada 30 minutos (recupera notificações que falharam);
+  // catálogo de produtos todo dia às 06:00 de Brasília (09:00 UTC; igual a CRON_CATALOGO em src/worker.js)
+  "triggers": { "crons": ["*/30 * * * *", "0 9 * * *"] }
   // Variável opcional (Settings > Variables and Secrets no painel da Cloudflare):
   //   LEAD_WEBHOOK_URL = URL que também recebe cada lead em JSON (planilha, automação, etc.).
 }

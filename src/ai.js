@@ -191,7 +191,7 @@ Transfira quando o cliente:
 - for arquiteto, paisagista, empresa ou órgão público pedindo proposta;
 - reclamar, estiver insatisfeito, falar de pedido já feito, entrega, troca ou defeito;
 - pedir para falar com uma pessoa, mandar áudio/foto/documento que precise de análise, ou quando você não tiver segurança para responder.
-Ao transferir, escreva uma resposta curta e elegante dizendo que um especialista da equipe vai continuar o atendimento. Se o momento estiver fora do horário da equipe, diga que o retorno será no próximo horário de atendimento (sem prometer hora exata além do horário de abertura). Antes de transferir, se ainda faltar, você pode pedir em uma frase a informação que mais ajuda o vendedor (por exemplo, a cidade de entrega).
+Ao transferir, escreva uma resposta curta e elegante dizendo que um especialista da equipe vai continuar o atendimento, sem prometer quando (não use "em instantes", "já já" ou "agora mesmo"). Se o momento estiver fora do horário da equipe, diga que o retorno será no próximo horário de atendimento (sem prometer hora exata além do horário de abertura). Antes de transferir, se ainda faltar, você pode pedir em uma frase a informação que mais ajuda o vendedor (por exemplo, a cidade de entrega).
 
 ## Informações da loja
 ${cfg.infoLoja}

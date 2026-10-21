@@ -15,7 +15,7 @@ import {
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
-import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync } from "./tray.js";
+import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
 import {
@@ -27,6 +27,7 @@ const FORM_FIELDS = ["nome", "whatsapp", "cidade", "email", "produto", "interess
 const TRACK_FIELDS = ["origem", "pagina", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "referrer"];
 
 const now = () => new Date().toISOString();
+const CRON_CATALOGO = "0 9 * * *"; // 06:00 em Brasília (igual ao wrangler.jsonc)
 
 function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -428,6 +429,15 @@ async function handleAdminApi(request, env, url) {
   }
 
   if (path === "/products" && method === "GET") return json({ ok: true, products: await listProductsAdmin(env) });
+  if (path === "/products/tray" && method === "POST") {
+    try {
+      const body = (await readJson(request)) || {};
+      return json({ ok: true, ...(await syncProdutosTray(env, { gravar: !!body.gravar })) });
+    } catch (err) {
+      if (err.code) return json({ ok: false, error: err.code, message: err.message }, 400);
+      throw err;
+    }
+  }
   if (path === "/products/import" && method === "POST") {
     const body = await readJson(request);
     const csv = String(body?.csv || "");
@@ -531,9 +541,12 @@ async function serveAdminPage(request, env, url) {
 }
 
 export default {
-  // Cron Trigger (wrangler.jsonc): sincroniza os pedidos da Tray a cada 30 minutos
+  // Cron Triggers (wrangler.jsonc): pedidos da Tray a cada 30 minutos; catálogo uma vez por dia
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(scheduledTraySync(env, { upsertLead, logEvent }).catch((err) => console.error("tray_cron_error", err?.message)));
+    const job = event.cron === CRON_CATALOGO
+      ? scheduledProdutosTray(env).catch((err) => console.error("tray_produtos_cron_error", err?.message))
+      : scheduledTraySync(env, { upsertLead, logEvent }).catch((err) => console.error("tray_cron_error", err?.message));
+    ctx.waitUntil(job);
   },
 
   async fetch(request, env, ctx) {

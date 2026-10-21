@@ -61,6 +61,10 @@ Leads que chamam direto no WhatsApp entram sozinhos pela integração abaixo (ou
 (preço, promoção com datas, estoque, medidas, descrição, fotos, link). A landing lê `/api/products` e monta a vitrine
 com os mais vendidos de cada linha (só quando o catálogo cobre ao menos 4 linhas; senão mantém a vitrine fixa do `main.js`).
 
+**Pela API da Tray** (`/admin` › Produtos › Catálogo pela API da Tray): lê produtos e categorias direto da loja e atualiza o catálogo
+(o que não vier mais da Tray sai da vitrine e da IA). Roda sozinho todo dia às 06:00 (Cron Trigger). Na loja de teste da Tray
+nada é gravado: "Testar leitura" mostra só uma amostra e os campos recebidos.
+
 ## Loja Tray
 `/admin` › Loja Tray: endereço da API (`https://…/web_api`), consumer key/secret do aplicativo Tray e o `code` de autorização da loja.
 - Pedido aguardando pagamento → lead em *Aguardando pagamento*; pago → *Venda fechada (Site Tray)* com valor e nº do pedido;

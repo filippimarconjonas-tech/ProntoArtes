@@ -10,6 +10,7 @@
 
 import { normalizePhone } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
+import { htmlToText } from "./products.js";
 
 const KEYS = ["tray_store_url", "tray_api_address", "tray_consumer_key", "tray_consumer_secret", "tray_code",
   "tray_access_token", "tray_refresh_token", "tray_token_expires", "tray_webhook_key", "tray_last_sync", "tray_last_webhook", "tray_last_error"];
@@ -397,4 +398,123 @@ export async function scheduledTraySync(env, deps) {
   const r = await syncTray(env, deps);
   const mudou = r.pedidos.filter((p) => p.lead_id && p.acao !== "sem mudanças").length;
   console.log("tray_cron", JSON.stringify({ ok: r.ok, pedidos: r.pedidos.length, mudou, passos: r.steps.filter((s) => !s.ok) }));
+}
+
+/* --------------------------------------------------------------
+   Catálogo de produtos pela API (substitui a planilha)
+   -------------------------------------------------------------- */
+
+/** Loja de teste da Tray: o catálogo dela não pode ir para a vitrine nem para a IA. */
+export const lojaDeTeste = (url) => /corpsuite|commercesuite|lojateste/i.test(String(url || ""));
+
+const numero = (v) => {
+  const n = Number(String(v ?? "").replace(",", "."));
+  return Number.isFinite(n) && String(v ?? "").trim() !== "" ? n : null;
+};
+const sim = (v) => v === true || v === 1 || /^(1|s|sim|true|yes)$/i.test(String(v ?? "").trim());
+const dataTray = (v) => (/^\d{4}-\d{2}-\d{2}/.test(String(v || "")) && !String(v).startsWith("0000") ? String(v).slice(0, 10) : null);
+
+function produtoDaTray(p, categorias) {
+  const promo = numero(p.promotional_price);
+  const imagens = (Array.isArray(p.ProductImage) ? p.ProductImage : [])
+    .map((i) => i?.https || i?.http).filter((u) => /^https?:\/\//.test(u || ""));
+  return {
+    id: String(p.id),
+    nome: String(p.name || "").trim(),
+    categoria: categorias[String(p.category_id)] || p.category_name || null,
+    preco: numero(p.price),
+    preco_promo: promo && promo > 0 ? promo : null,
+    promo_inicio: dataTray(p.start_promotion),
+    promo_fim: dataTray(p.end_promotion),
+    estoque: numero(p.stock),
+    disponivel: "available" in p ? (sim(p.available) ? 1 : 0) : 1,
+    exibir: "display" in p ? (sim(p.display) ? 1 : 0) : 1,
+    peso_g: numero(p.weight),
+    comprimento: numero(p.length), largura: numero(p.width), altura: numero(p.height),
+    vendidos: numero(p.quantity_sold), // nem toda loja devolve; se faltar, mantém o valor atual
+    descricao: htmlToText(p.description),
+    url: p.url?.https || p.url?.http || null,
+    imagens: JSON.stringify([...new Set(imagens)].slice(0, 8))
+  };
+}
+
+/**
+ * Lê o catálogo na API da Tray. Com gravar = false (loja de teste ou "Testar leitura"), só devolve
+ * um resumo e uma amostra para conferir os campos; com gravar = true atualiza a tabela products.
+ */
+export async function syncProdutosTray(env, { gravar = false } = {}) {
+  const cfg = await trayConfig(env);
+  if (gravar && lojaDeTeste(cfg.store)) throw new TrayError("loja_de_teste", "Esta é a loja de teste da Tray: o catálogo dela não é gravado (use \"Testar leitura\").");
+  const orcamento = { resta: LIMITE_CHAMADAS - 1 };
+
+  // Categorias (id → nome)
+  const categorias = {};
+  for (let page = 1; page <= 5; page++) {
+    const r = await api(env, `/categories?limit=50&page=${page}`, orcamento).catch((err) => { if (err instanceof SemOrcamento) throw err; return null; });
+    const lista = (r?.Categories || []).map((x) => x.Category).filter(Boolean);
+    for (const c of lista) categorias[String(c.id)] = c.name;
+    if (lista.length < 50) break;
+  }
+
+  // Produtos, de 50 em 50
+  const produtos = [];
+  let total = null, campos = [], completo = false;
+  try {
+    for (let page = 1; page <= 40; page++) {
+      const r = await api(env, `/products?limit=50&page=${page}`, orcamento);
+      const lista = (r?.Products || []).map((x) => x.Product).filter(Boolean);
+      if (page === 1) { total = numero(r?.paging?.total); campos = lista[0] ? Object.keys(lista[0]) : []; }
+      produtos.push(...lista);
+      if (lista.length < 50 || (total != null && produtos.length >= total)) { completo = true; break; }
+    }
+  } catch (err) {
+    if (!(err instanceof SemOrcamento)) throw err;
+  }
+
+  const itens = produtos.map((p) => produtoDaTray(p, categorias)).filter((it) => it.id && it.nome);
+  const ids = itens.map((it) => it.id);
+  let emComum = 0;
+  for (let i = 0; i < ids.length; i += 90) {
+    const lote = ids.slice(i, i + 90);
+    const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM products WHERE id IN (${lote.map(() => "?").join(",")})`).bind(...lote).first();
+    emComum += r?.n || 0;
+  }
+  const resumo = {
+    loja: cfg.store,
+    loja_de_teste: lojaDeTeste(cfg.store),
+    lidos: itens.length,
+    total_na_tray: total,
+    completo,
+    categorias: Object.keys(categorias).length,
+    ja_no_catalogo: emComum,
+    campos,
+    amostra: itens.slice(0, 5).map(({ descricao, imagens, ...it }) => ({ ...it, descricao: (descricao || "").slice(0, 160), imagens: JSON.parse(imagens).length }))
+  };
+  if (!gravar) return { ...resumo, gravado: false };
+
+  const cols = Object.keys(itens[0] || {});
+  if (cols.length) {
+    const upd = cols.filter((c) => c !== "id").map((c) => (c === "vendidos" ? "vendidos = COALESCE(excluded.vendidos, products.vendidos)" : `${c} = excluded.${c}`)).join(", ");
+    const sql = `INSERT INTO products (${cols.join(", ")}, origem, updated_at) VALUES (${cols.map(() => "?").join(", ")}, 'api', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      ON CONFLICT(id) DO UPDATE SET ${upd}, origem = 'api', updated_at = excluded.updated_at`;
+    for (let i = 0; i < itens.length; i += 50) {
+      await env.DB.batch(itens.slice(i, i + 50).map((it) => env.DB.prepare(sql).bind(...cols.map((c) => it[c]))));
+    }
+  }
+  // Leitura completa: o que não veio da Tray sai da vitrine e das respostas da IA
+  let ocultados = 0;
+  if (completo && ids.length) {
+    const r = await env.DB.prepare(`UPDATE products SET exibir = 0 WHERE exibir = 1 AND id NOT IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(ids)).run();
+    ocultados = r.meta?.changes || 0;
+  }
+  await setSettings(env, { tray_products_sync: now() });
+  return { ...resumo, gravado: true, ocultados };
+}
+
+/** Atualização diária do catálogo (só na loja real e autorizada). */
+export async function scheduledProdutosTray(env) {
+  const cfg = await trayConfig(env);
+  if (!cfg.api || !(cfg.token || cfg.refresh) || lojaDeTeste(cfg.store)) return;
+  const r = await syncProdutosTray(env, { gravar: true });
+  console.log("tray_produtos_cron", JSON.stringify({ lidos: r.lidos, completo: r.completo, ocultados: r.ocultados }));
 }

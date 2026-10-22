@@ -269,7 +269,11 @@ export async function handleTrayWebhook(request, env, deps) {
 
   const ct = request.headers.get("content-type") || "";
   const data = ct.includes("json") ? await request.json().catch(() => ({})) : Object.fromEntries(await request.formData().catch(() => new FormData()));
-  await setSettings(env, { tray_last_webhook: now() });
+  // Guarda a última notificação recebida (evidência para a homologação da Tray)
+  await setSettings(env, {
+    tray_last_webhook: now(),
+    tray_last_webhook_payload: JSON.stringify({ recebido_em: now(), metodo: request.method, content_type: ct, campos: data }).slice(0, 4000)
+  });
 
   // A Tray exige resposta 200 em toda notificação: responde na hora e processa em seguida.
   // Se falhar, o erro fica registrado no painel e a sincronização automática (a cada 30 min) recupera o pedido.
@@ -535,4 +539,87 @@ export async function scheduledProdutosTray(env) {
   if (!cfg.api || !(cfg.token || cfg.refresh) || lojaDeTeste(cfg.store)) return;
   const r = await syncProdutosTray(env, { gravar: true });
   console.log("tray_produtos_cron", JSON.stringify({ lidos: r.lidos, completo: r.completo, ocultados: r.ocultados }));
+}
+
+/* --------------------------------------------------------------
+   Evidências para a homologação da Tray
+   -------------------------------------------------------------- */
+
+const SENSIVEIS = /^(access_token|refresh_token|code|consumer_key|consumer_secret|cpf|cnpj|rg|email|phone|cellphone|telephone|zip_code|address|number|complement|neighborhood|token|password)$/i;
+
+/** Esconde tokens e dados pessoais, mantendo a estrutura da resposta. */
+function mascarar(v, chave = "") {
+  if (Array.isArray(v)) return v.map((x) => mascarar(x));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mascarar(x, k)]));
+  // "code" também é o código HTTP nas respostas (ex.: 200): só esconde quando parece um code de autorização
+  if (SENSIVEIS.test(chave) && v != null && String(v) !== "" && !(chave === "code" && /^\d{3}$/.test(String(v)))) {
+    const t = String(v);
+    return t.length <= 4 ? "***" : t.slice(0, 2) + "***" + t.slice(-2);
+  }
+  return v;
+}
+
+/** Corta listas longas para o documento não ficar gigante. */
+function resumir(v, max = 2) {
+  if (Array.isArray(v)) return v.slice(0, max).map((x) => resumir(x, max)).concat(v.length > max ? [`… (+${v.length - max} itens omitidos)`] : []);
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, resumir(x, max)]));
+  return typeof v === "string" && v.length > 300 ? v.slice(0, 300) + "… (texto cortado)" : v;
+}
+
+/**
+ * Chama uma vez cada rota usada pela integração e guarda requisição e resposta (mascaradas)
+ * em settings.tray_evidencias. A renovação do token é real: o token novo é salvo.
+ */
+export async function coletarEvidencias(env) {
+  const cfg = await trayConfig(env);
+  if (!cfg.api) throw new TrayError("tray_nao_configurada", "Cadastre e autorize a loja primeiro.");
+  const base = cfg.api;
+  const itens = [];
+
+  async function chamar(nome, metodo, path, { usaToken = true } = {}) {
+    const tk = usaToken ? (await accessToken(env)).token : null;
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await fetch(`${base}${path}${usaToken ? `${sep}access_token=${encodeURIComponent(tk)}` : ""}`, { method: metodo });
+    const texto = await res.text();
+    let json = null;
+    try { json = JSON.parse(texto); } catch { /* não-JSON */ }
+    itens.push({
+      nome, metodo,
+      url: `${base}${path}${usaToken ? `${sep}access_token=***` : ""}`.replace(/refresh_token=[^&]+/, "refresh_token=***"),
+      status: res.status,
+      response: json != null ? resumir(mascarar(json)) : texto.slice(0, 1000)
+    });
+    return json;
+  }
+
+  // 1) Renovação do token (mesmo formato de resposta do POST /auth)
+  if (cfg.refresh) {
+    const r = await chamar("Renovação do token de acesso", "GET", `/auth?refresh_token=${encodeURIComponent(cfg.refresh)}`, { usaToken: false });
+    if (r?.access_token) await saveTokens(env, r);
+  }
+  // 2) Catálogo
+  await chamar("Listar categorias", "GET", "/categories?limit=50&page=1");
+  const lp = await chamar("Listar produtos", "GET", "/products?limit=50&page=1");
+  const pid = lp?.Products?.[0]?.Product?.id;
+  if (pid) await chamar("Consultar produto (descrição completa)", "GET", `/products/${encodeURIComponent(pid)}`);
+  // 3) Pedidos e clientes
+  const lo = await chamar("Listar pedidos", "GET", "/orders?limit=30&sort=id_desc");
+  const oid = lo?.Orders?.[0]?.Order?.id;
+  if (oid) {
+    const oc = await chamar("Consultar pedido completo", "GET", `/orders/${encodeURIComponent(oid)}/complete`);
+    const o = await chamar("Consultar pedido", "GET", `/orders/${encodeURIComponent(oid)}`);
+    const cid = oc?.Order?.customer_id || o?.Order?.customer_id;
+    if (cid) await chamar("Consultar cliente", "GET", `/customers/${encodeURIComponent(cid)}`);
+  }
+
+  const s = await getSettings(env, ["tray_last_webhook_payload"]);
+  const resultado = {
+    gerado_em: now(),
+    loja: cfg.store,
+    api_address: base,
+    ultima_notificacao: s.tray_last_webhook_payload ? JSON.parse(s.tray_last_webhook_payload) : null,
+    rotas: itens
+  };
+  await setSettings(env, { tray_evidencias: JSON.stringify(resultado) });
+  return { ok: true, rotas: itens.map((i) => ({ nome: i.nome, metodo: i.metodo, status: i.status })), tem_notificacao: !!resultado.ultima_notificacao };
 }

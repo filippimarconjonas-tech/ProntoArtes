@@ -810,7 +810,9 @@
         '<div class="panel"><h3>URL de notificação (webhook)</h3>' +
           (st.webhook_url ? '<p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.webhook_url) + "</p>" : '<p class="empty">Gerada ao salvar as credenciais.</p>') +
           (st.callback_url ? '<p class="muted" style="font-size:12.5px;margin:12px 0 4px">URL de retorno (callback) — se o cadastro do aplicativo na Tray pedir:</p><p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.callback_url) + "</p>" : "") +
-          '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o CRM também sincroniza sozinho a cada 30 minutos, e o botão de sincronizar continua disponível.</p></div>' +
+          '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o CRM também sincroniza sozinho a cada 30 minutos, e o botão de sincronizar continua disponível.</p>' +
+          '<p style="margin:12px 0 4px"><button class="btn btn--ghost btn--sm" id="tray-evid">Gerar evidências para homologação</button> <span class="form-msg" id="tray-evid-msg"></span></p>' +
+          '<p class="muted" style="font-size:12px;margin:0">Chama uma vez cada rota usada pela integração e registra requisição e resposta (tokens e dados pessoais mascarados) para o documento de homologação da Tray.</p></div>' +
 
         (result ? '<div class="panel panel--wide"><h3>Resultado</h3><ul class="timeline">' + result.steps.map(function (s) {
           return '<li class="' + (s.ok ? "t-etapa" : "t-nota") + '"><time>' + (s.ok ? "✅" : "❌") + " " + esc(s.label) + "</time>" + esc(s.detail) + "</li>";
@@ -824,6 +826,14 @@
 
       $$("[data-open-lead]", view).forEach(function (a) {
         a.addEventListener("click", function (e) { e.preventDefault(); openLead(+a.getAttribute("data-open-lead")); });
+      });
+      $("#tray-evid").addEventListener("click", function () {
+        var b = this, m = $("#tray-evid-msg");
+        b.disabled = true; m.style.color = "var(--soft)"; m.textContent = "Chamando as rotas da Tray…";
+        api("/tray/evidencias", { method: "POST", body: {} }).then(function (r) {
+          m.style.color = ""; m.textContent = "✅ " + r.rotas.length + " rotas registradas" + (r.tem_notificacao ? " + última notificação" : " (nenhuma notificação recebida ainda)");
+        }).catch(function (err) { m.style.color = ""; m.textContent = err.serverMessage || err.code; })
+          .then(function () { b.disabled = false; });
       });
       var form = $("#tray-form");
       $$("input[readonly]", form).forEach(function (i) { i.addEventListener("focus", function () { i.removeAttribute("readonly"); }); });

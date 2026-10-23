@@ -356,7 +356,7 @@ export async function handleTrayCallback(request, env, key) {
     .map(comoApi).find((t) => /^https:\/\/[^\s/]+(\/[^\s]*)?\/web_api$/i.test(t)) || "";
   // Diagnóstico: quais parâmetros a Tray mandou (valores mascarados)
   await setSettings(env, {
-    tray_last_callback: JSON.stringify({ em: now(), params: Object.fromEntries([...q].map(([k, v]) => [k, k === "code" ? (v ? v.slice(0, 4) + "***" : "") : v.slice(0, 200)])) })
+    tray_last_callback: JSON.stringify({ em: now(), params: Object.fromEntries([...q].map(([k, v]) => [k, ["code", "token", "ctx"].includes(k) ? (v ? v.slice(0, 4) + "***" : "") : v.slice(0, 200)])) })
   });
   const back = (status) => Response.redirect(new URL(`/admin#tray`, url).toString() + `?tray=${status}`, 302);
   // A instalação pela loja de aplicativos volta sem code (só url/store/adm_user): o code vem ao clicar em "Acessar"

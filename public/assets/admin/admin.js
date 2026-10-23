@@ -779,6 +779,7 @@
       history.replaceState(null, "", location.pathname + "#tray");
       if (flag === "ok") toast("Loja Tray autorizada! Clique em “Salvar e sincronizar pedidos”.");
       else if (flag === "erro") toast("A Tray devolveu o code, mas a autorização falhou. Confira consumer key e secret.", true);
+      else if (flag === "instalado") toast("App instalado na Tray. Agora, no painel da Tray, abra Aplicativos › Meus aplicativos e clique em Acessar no app para gerar o code.");
       else if (flag === "sem_code") toast("A Tray não devolveu o code. Tente autorizar de novo.", true);
     }
     if (!result) view.innerHTML = '<p class="empty">Carregando…</p>';

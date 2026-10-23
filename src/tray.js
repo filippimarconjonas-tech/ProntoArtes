@@ -341,10 +341,27 @@ export async function handleTrayCallback(request, env, key) {
   const url = new URL(request.url);
   const cfg = await trayConfig(env);
   if (!cfg.webhookKey || key !== cfg.webhookKey) return new Response("Forbidden", { status: 403 });
-  const code = url.searchParams.get("code") || "";
-  const apiAddress = (url.searchParams.get("api_address") || "").replace(/\/+$/, "");
+  const q = url.searchParams;
+  const code = q.get("code") || "";
+  // O auth.php manda api_address; a instalação pela loja de aplicativos pode mandar outros nomes
+  // (api_host, url, store_host). Último recurso: o endereço da loja salvo no CRM + /web_api.
+  const comoApi = (v) => {
+    let t = String(v || "").trim().replace(/\/+$/, "");
+    if (!t) return "";
+    if (!/^https?:\/\//i.test(t)) t = "https://" + t;
+    t = t.replace(/^http:\/\//i, "https://");
+    return /\/web_api$/i.test(t) ? t : t + "/web_api";
+  };
+  const apiAddress = [q.get("api_address"), q.get("api_host"), q.get("url"), q.get("store_host"), cfg.store]
+    .map(comoApi).find((t) => /^https:\/\/[^\s/]+(\/[^\s]*)?\/web_api$/i.test(t)) || "";
+  // Diagnóstico: quais parâmetros a Tray mandou (valores mascarados)
+  await setSettings(env, {
+    tray_last_callback: JSON.stringify({ em: now(), params: Object.fromEntries([...q].map(([k, v]) => [k, k === "code" ? (v ? v.slice(0, 4) + "***" : "") : v.slice(0, 200)])) })
+  });
   const back = (status) => Response.redirect(new URL(`/admin#tray`, url).toString() + `?tray=${status}`, 302);
-  if (!code || !/^https:\/\/[^\s]+\/web_api$/i.test(apiAddress)) return back("sem_code");
+  // A instalação pela loja de aplicativos volta sem code (só url/store/adm_user): o code vem ao clicar em "Acessar"
+  if (!code && (q.has("store") || q.has("url") || q.has("adm_user"))) return back("instalado");
+  if (!code || !apiAddress) return back("sem_code");
   await setSettings(env, { tray_code: code, tray_api_address: apiAddress, tray_access_token: null, tray_refresh_token: null, tray_token_expires: null });
   try {
     await authorize(env, { ...cfg, code, api: apiAddress });

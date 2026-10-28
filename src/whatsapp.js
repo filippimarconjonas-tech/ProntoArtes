@@ -302,7 +302,7 @@ export async function graph(path, { method = "GET", token, form, json } = {}) {
  * 4. assina a conta do WhatsApp Business no app  5. confirma a assinatura
  * Ao final apaga o token (não é necessário para receber mensagens).
  */
-export async function connectWhatsApp(env, origin) {
+export async function connectWhatsApp(env, origin, opts = {}) {
   const cfg = await waConfig(env);
   // Token de configuração (temporário) ou, se não houver, o token permanente do Usuário do sistema
   const tok = cfg.accessToken || cfg.apiToken;
@@ -352,13 +352,28 @@ export async function connectWhatsApp(env, origin) {
     if (appId) await setSettings(env, { whatsapp_app_id: appId });
   }
 
+  let numero = null;
   await tokenStep("Conferir o número de WhatsApp", async () => {
-    const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,platform_type,is_on_biz_app`, { token: tok });
+    const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,platform_type,is_on_biz_app,status`, { token: tok });
+    numero = n;
     await setSettings(env, { whatsapp_display_phone: n.display_phone_number || null, whatsapp_verified_name: n.verified_name || null });
     return `${n.display_phone_number || ""} · ${n.verified_name || ""}` +
       (n.is_on_biz_app === true ? " · coexistência com o app ativa" : n.is_on_biz_app === false ? " · número NÃO está no WhatsApp Business App" : "") +
       (n.quality_rating ? ` · qualidade ${n.quality_rating}` : "");
   });
+
+  // Número novo, só na API (sem o app no celular): precisa ser registrado na Cloud API com um PIN de 6 dígitos.
+  const pin = String(opts.pin || "").replace(/\D/g, "");
+  let regOk = true;
+  if (numero && numero.is_on_biz_app !== true && numero.status !== "CONNECTED") {
+    if (!/^\d{6}$/.test(pin)) {
+      regOk = false;
+      steps.push({ label: "Registrar o número na Cloud API", ok: false, detail: "Número ainda não registrado (status " + (numero.status || "desconhecido") + "). Informe um PIN de 6 dígitos e clique em “Salvar e conectar” de novo." });
+    } else regOk = await step("Registrar o número na Cloud API", async () => {
+      await graph(`/${cfg.phoneNumberId}/register`, { method: "POST", token: tok, json: { messaging_product: "whatsapp", pin } });
+      return "Número registrado. Guarde o PIN: ele é a verificação em duas etapas do número.";
+    });
+  }
 
   const hookOk = !appId
     ? (steps.push({ label: "Cadastrar o webhook do aplicativo", ok: false, detail: "Pulado: App ID desconhecido." }), false)
@@ -389,7 +404,7 @@ export async function connectWhatsApp(env, origin) {
     return "Apps assinados: " + apps.join(", ");
   });
 
-  const ok = hookOk && subOk;
+  const ok = hookOk && subOk && regOk;
   if (ok) {
     await setSettings(env, { whatsapp_connected_at: new Date().toISOString(), ...(cfg.accessToken ? { whatsapp_access_token: null } : {}) });
     if (cfg.accessToken) steps.push({ label: "Segurança", ok: true, detail: "Token temporário de configuração apagado do banco. O token permanente continua salvo para envio de mensagens." });

@@ -435,6 +435,9 @@ export async function completeEmbeddedSignup(env, origin, body) {
       whatsapp_display_phone: display,
       whatsapp_verified_name: name,
       whatsapp_business_token: token,
+      // O token permanente salvo antes é de outro portfólio (número de teste) e não acessa esta conta:
+      // a partir daqui vale o token da empresa gerado pelo Cadastro incorporado (não expira)
+      whatsapp_system_token: null,
       whatsapp_connected_at: new Date().toISOString()
     });
     steps.push({ label: "Pronto", ok: true, detail: "Número da loja conectado. Mensagens novas passam a entrar no CRM." });

@@ -136,6 +136,20 @@ async function handleInbound(env, m, contact, deps) {
   if (m.type !== "reaction") deps.onInbound?.(leadId, at);
 }
 
+/**
+ * Mensagem automática do WhatsApp Business App (saudação, ausência, resposta rápida automática):
+ * sai segundos depois da mensagem do cliente ou repete o mesmo texto já enviado a outro cliente.
+ */
+const AUTO_SEGUNDOS = 60;
+async function mensagemAutomatica(env, lead, texto, at) {
+  if (lead.last_inbound_at && Date.parse(at) - Date.parse(lead.last_inbound_at) <= AUTO_SEGUNDOS * 1000) return true;
+  if (texto.length < 40) return false; // "ok", "bom dia": curtas demais para dizer que é automática
+  const igual = await env.DB.prepare(
+    "SELECT 1 FROM lead_events WHERE type = 'whatsapp_out' AND lead_id != ? AND text IN (?, ?) LIMIT 1"
+  ).bind(lead.id, texto, texto + " (mensagem automática do app)").first();
+  return !!igual;
+}
+
 /** Mensagem enviada pela equipe no WhatsApp Business App (coexistência). */
 async function handleEcho(env, m, deps) {
   if (!m?.id || !m.to || await alreadyProcessed(env, m.id)) return;
@@ -143,6 +157,14 @@ async function handleEcho(env, m, deps) {
   const at = m.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : now();
   const lead = await env.DB.prepare("SELECT * FROM leads WHERE whatsapp = ? ORDER BY id DESC LIMIT 1").bind(phone).first();
   if (!lead) { await markProcessed(env, m.id, null, "out"); return; }
+  const texto = messageText(m).slice(0, 1000);
+
+  // Mensagem automática do app: fica no histórico, mas não conta como atendimento nem pausa a IA
+  if (await mensagemAutomatica(env, lead, texto, at)) {
+    await deps.logEvent(env, lead.id, "whatsapp_out", texto + " (mensagem automática do app)");
+    await markProcessed(env, m.id, lead.id, "out");
+    return;
+  }
 
   if (lead.pipeline === "vendas" && lead.stage === "novo") {
     await env.DB.prepare("UPDATE leads SET stage = 'atendimento', stage_changed_at = ? WHERE id = ?").bind(now(), lead.id).run();
@@ -151,7 +173,7 @@ async function handleEcho(env, m, deps) {
   await env.DB.prepare(
     "UPDATE leads SET last_outbound_at = ?, first_contact_at = COALESCE(first_contact_at, ?), updated_at = ? WHERE id = ?"
   ).bind(at, at, now(), lead.id).run();
-  await deps.logEvent(env, lead.id, "whatsapp_out", messageText(m).slice(0, 1000));
+  await deps.logEvent(env, lead.id, "whatsapp_out", texto);
   await markProcessed(env, m.id, lead.id, "out");
   await deps.onHumanReply?.(lead.id);
 }

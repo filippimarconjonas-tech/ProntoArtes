@@ -444,3 +444,52 @@ export async function completeEmbeddedSignup(env, origin, body) {
   }
   return { ok: subOk, steps };
 }
+
+/**
+ * Diagnóstico do envio: qual token o CRM usa e o que a Meta diz dele (permissões e contas).
+ * Nunca devolve o token; o resultado também fica em settings.whatsapp_diagnostico.
+ */
+export async function diagnoseWhatsApp(env) {
+  const s = await getSettings(env, ["whatsapp_system_token", "whatsapp_business_token"]);
+  const cfg = await waConfig(env);
+  const origem = env.WHATSAPP_SYSTEM_TOKEN ? "Secret WHATSAPP_SYSTEM_TOKEN (Cloudflare)"
+    : s.whatsapp_system_token ? "Token permanente salvo no painel"
+    : s.whatsapp_business_token ? "Token da empresa (Cadastro incorporado)" : "nenhum";
+  const out = { em: new Date().toISOString(), origem_do_token: origem, phone_number_id: cfg.phoneNumberId, waba_id: cfg.wabaId, verificacoes: [] };
+  const check = async (nome, fn) => {
+    try { out.verificacoes.push({ nome, ok: true, resultado: await fn() }); }
+    catch (err) { out.verificacoes.push({ nome, ok: false, resultado: err.message }); }
+  };
+  if (cfg.apiToken && cfg.appId && cfg.appSecret) {
+    await check("Token (debug_token)", async () => {
+      const r = await graph(`/debug_token?input_token=${encodeURIComponent(cfg.apiToken)}&access_token=${encodeURIComponent(cfg.appId + "|" + cfg.appSecret)}`);
+      const d = r.data || {};
+      return {
+        valido: d.is_valid, tipo: d.type, app_id: d.app_id, aplicacao: d.application,
+        expira: d.expires_at ? new Date(d.expires_at * 1000).toISOString() : "não expira",
+        permissoes: d.scopes,
+        contas_por_permissao: (d.granular_scopes || []).map((g) => ({ permissao: g.scope, contas: g.target_ids || "todas" }))
+      };
+    });
+  }
+  if (cfg.apiToken && cfg.phoneNumberId) {
+    await check("Número (leitura com o token de envio)", async () => {
+      const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,verified_name,status,platform_type,is_on_biz_app,code_verification_status,name_status,quality_rating`, { token: cfg.apiToken });
+      return n;
+    });
+  }
+  if (cfg.apiToken && cfg.wabaId) {
+    await check("Conta do WhatsApp Business (apps assinados)", async () => {
+      const r = await graph(`/${cfg.wabaId}/subscribed_apps`, { token: cfg.apiToken });
+      return (r.data || []).map((a) => a.whatsapp_business_api_data?.name || a.whatsapp_business_api_data?.id || a);
+    });
+  }
+  if (s.whatsapp_business_token && cfg.phoneNumberId && s.whatsapp_business_token !== cfg.apiToken) {
+    await check("Número (leitura com o token da empresa)", async () => {
+      const n = await graph(`/${cfg.phoneNumberId}?fields=display_phone_number,status`, { token: s.whatsapp_business_token });
+      return n;
+    });
+  }
+  await setSettings(env, { whatsapp_diagnostico: JSON.stringify(out).slice(0, 20000) });
+  return out;
+}

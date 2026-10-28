@@ -17,7 +17,7 @@ import {
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
 import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
-import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup } from "./whatsapp.js";
+import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
 import {
   aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
   pauseOnHumanReply, onInboundMessage
@@ -472,6 +472,7 @@ async function handleAdminApi(request, env, url) {
     console.log("whatsapp_embedded", JSON.stringify(r));
     return json({ ok: true, conectado: r.ok, steps: r.steps, status: await whatsappStatus(env, url.origin) });
   }
+  if (path === "/whatsapp/diagnostico" && method === "POST") return json({ ok: true, ...(await diagnoseWhatsApp(env)) });
   if (path === "/whatsapp/connect" && method === "POST") {
     const r = await connectWhatsApp(env, url.origin);
     console.log("whatsapp_connect", JSON.stringify(r));

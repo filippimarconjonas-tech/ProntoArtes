@@ -342,7 +342,8 @@
           '<form id="es-form">' +
             '<label class="fld"><span>Configuration ID (Login do Facebook para Empresas)</span><input name="config_id" inputmode="numeric" value="' + esc(st.config_id || "") + '" placeholder="Ex.: 1234567890123456"></label>' +
             '<div class="modal__actions" style="justify-content:flex-start"><button type="button" class="btn btn--ghost" id="es-save">Salvar</button>' +
-            '<button type="button" class="btn btn--wa" id="es-start"' + (!st.app_id || !st.config_id ? " disabled" : "") + ">Conectar número da loja</button></div>" +
+            '<button type="button" class="btn btn--wa" id="es-start"' + (!st.app_id || !st.config_id ? " disabled" : "") + ">Conectar número da loja</button>" +
+            '<button type="button" class="btn btn--ghost" id="wa-diag">Diagnosticar envio</button></div>' +
             '<p class="form-msg" id="es-msg">' + (!st.app_id ? "Preencha o App ID em Credenciais da Meta." : !st.config_id ? "Preencha o Configuration ID para liberar o botão." : "") + "</p>" +
           "</form></div>" +
 
@@ -432,6 +433,16 @@
     $("#es-save").addEventListener("click", function () {
       api("/whatsapp", { method: "POST", body: { config_id: $("#es-form").config_id.value } })
         .then(function () { toast("Configuration ID salvo"); renderWhatsApp(); }).catch(fail);
+    });
+    $("#wa-diag").addEventListener("click", function () {
+      var b = this, msg = $("#es-msg");
+      b.disabled = true; msg.textContent = "Consultando a Meta…";
+      api("/whatsapp/diagnostico", { method: "POST", body: {} }).then(function (r) {
+        msg.textContent = "";
+        openModal("<h2>Diagnóstico do envio</h2><p class=\"muted\" style=\"font-size:12.5px\">Token usado: <strong>" + esc(r.origem_do_token) + "</strong></p>" +
+          '<pre style="white-space:pre-wrap;font-size:11.5px;background:#faf7f3;padding:10px;border-radius:8px;max-height:60vh;overflow:auto">' + esc(JSON.stringify(r.verificacoes, null, 2)) + "</pre>" +
+          '<div class="modal__actions"><button type="button" class="btn btn--primary" data-close-modal>Fechar</button></div>');
+      }).catch(fail).then(function () { b.disabled = false; });
     });
     $("#es-start").addEventListener("click", function () {
       var btn = this;

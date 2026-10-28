@@ -354,6 +354,7 @@
           '<label class="fld"><span>Chave secreta do aplicativo ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
           '<label class="fld"><span>Token de acesso ' + (st.tem_access_token ? "(salvo ✓)" : "(usado só para conectar; é apagado depois)") + '</span><input name="access_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_access_token ? "••••••••" : "Cole o token EAAB…") + '"></label>' +
           '<label class="fld"><span>Token permanente — Usuário do sistema ' + (st.tem_token_envio ? "(salvo ✓)" : "(para enviar mensagens e criar modelos)") + '</span><input name="system_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_token_envio ? "••••••••" : "Cole o token EAAB… do Usuário do sistema") + '"></label>' +
+          '<label class="fld"><span>PIN de registro (6 dígitos) — só para número novo que não está no app do celular</span><input name="pin" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="Crie e guarde um PIN, ex.: 482913"></label>' +
           '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost" name="acao" value="salvar">Salvar</button><button class="btn btn--wa" name="acao" value="conectar">Salvar e conectar</button></div>' +
           '<p class="form-msg"></p>' +
         "</form></div>" +
@@ -399,7 +400,7 @@
           if (clicked !== "conectar") { toast("Credenciais salvas"); renderWhatsApp(); return; }
           msg.style.color = "var(--soft)";
           msg.textContent = "Conectando com a Meta…";
-          return api("/whatsapp/connect", { method: "POST", body: {} }).then(function (r) {
+          return api("/whatsapp/connect", { method: "POST", body: { pin: form.pin.value.trim() } }).then(function (r) {
             toast(r.conectado ? "WhatsApp conectado!" : "A conexão não terminou — veja os detalhes abaixo", !r.conectado);
             renderWhatsApp(r);
             updateWaDot();

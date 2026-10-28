@@ -291,7 +291,7 @@ export async function graph(path, { method = "GET", token, form, json } = {}) {
     if (!e) throw new Error(`HTTP ${res.status}`);
     // A Meta coloca a explicação útil em error_user_title/error_user_msg e error_data.details
     const extra = [e.error_user_title, e.error_user_msg, e.error_data?.details].filter(Boolean).join(" — ");
-    throw new Error(`${e.message}${e.code ? " (código " + e.code + (e.error_subcode ? "/" + e.error_subcode : "") + ")" : ""}${extra ? ": " + extra : ""}`);
+    throw new Error(`${e.message}${e.code ? " (código " + e.code + (e.error_subcode ? "/" + e.error_subcode : "") + ")" : ""}${extra ? ": " + extra : ""}${e.fbtrace_id ? " [fbtrace_id " + e.fbtrace_id + "]" : ""}`);
   }
   return data;
 }
@@ -504,6 +504,23 @@ export async function diagnoseWhatsApp(env) {
     await check("Conta do WhatsApp Business (apps assinados)", async () => {
       const r = await graph(`/${cfg.wabaId}/subscribed_apps`, { token: cfg.apiToken });
       return (r.data || []).map((a) => a.whatsapp_business_api_data?.name || a.whatsapp_business_api_data?.id || a);
+    });
+  }
+  // health_status: a Meta diz se o número/conta/empresa pode enviar e, se não, o motivo e a solução
+  if (cfg.apiToken && cfg.phoneNumberId) {
+    await check("Pode enviar? (health_status do número)", async () => {
+      const r = await graph(`/${cfg.phoneNumberId}?fields=health_status`, { token: cfg.apiToken });
+      return r.health_status;
+    });
+  }
+  if (cfg.apiToken && cfg.wabaId) {
+    await check("Pode enviar? (health_status da conta)", async () => {
+      const r = await graph(`/${cfg.wabaId}?fields=health_status,name,account_review_status,business_verification_status,currency`, { token: cfg.apiToken });
+      return r;
+    });
+    await check("Modelos de mensagem (leitura)", async () => {
+      const r = await graph(`/${cfg.wabaId}/message_templates?fields=name,status&limit=5`, { token: cfg.apiToken });
+      return (r.data || []).map((t) => `${t.name}: ${t.status}`);
     });
   }
   if (s.whatsapp_business_token && cfg.phoneNumberId && s.whatsapp_business_token !== cfg.apiToken) {

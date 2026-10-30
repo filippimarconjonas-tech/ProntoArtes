@@ -16,8 +16,8 @@ import {
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
-import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
-import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
+import { sendToLead, listTemplates, createTemplate, deleteTemplate, outroNumero } from "./wa-api.js";
+import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp, waConfig } from "./whatsapp.js";
 import {
   aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
   pauseOnHumanReply, onInboundMessage
@@ -483,7 +483,7 @@ async function handleAdminApi(request, env, url) {
     const { results } = await env.DB.prepare(
       `SELECT id, created_at, updated_at, nome, whatsapp, cidade, produto, interesse, espaco, prazo, faixa, score, perfil,
               pipeline, stage, stage_changed_at, post_stage, next_followup_at, valor, canal_fechamento, motivo_perda,
-              origem, canal_entrada, utm_source, envios, first_contact_at, last_inbound_at, last_outbound_at,
+              origem, canal_entrada, utm_source, envios, first_contact_at, last_inbound_at, last_outbound_at, wa_canal,
               ai_pausada, CASE WHEN ai_draft IS NULL THEN 0 ELSE 1 END AS ai_rascunho
          FROM leads ORDER BY created_at DESC LIMIT 2000`
     ).all();
@@ -513,6 +513,7 @@ async function handleAdminApi(request, env, url) {
       const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(id).first();
       if (!lead) return json({ ok: false, error: "not_found" }, 404);
       const { results: events } = await env.DB.prepare("SELECT * FROM lead_events WHERE lead_id = ? ORDER BY created_at DESC, id DESC").bind(id).all();
+      lead.wa_outro_numero = outroNumero(lead, await waConfig(env));
       return json({ ok: true, lead, events });
     }
     if (method === "PATCH") return updateLead(env, id, (await readJson(request)) || {}, user);

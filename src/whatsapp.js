@@ -88,7 +88,7 @@ async function markProcessed(env, id, leadId, direction) {
 }
 
 /** Mensagem do cliente. */
-async function handleInbound(env, m, contact, deps) {
+async function handleInbound(env, m, contact, deps, meta = {}) {
   if (!m?.id || !m.from || await alreadyProcessed(env, m.id)) return;
   const phone = normalizeWaId(m.from);
   const text = messageText(m).slice(0, 1000);
@@ -130,7 +130,9 @@ async function handleInbound(env, m, contact, deps) {
     }
   }
 
-  await env.DB.prepare("UPDATE leads SET last_inbound_at = ?, updated_at = ? WHERE id = ?").bind(at, now(), leadId).run();
+  await env.DB.prepare("UPDATE leads SET last_inbound_at = ?, updated_at = ?, wa_phone_id = COALESCE(?, wa_phone_id), wa_canal = COALESCE(?, wa_canal) WHERE id = ?")
+    .bind(at, now(), meta.phone_number_id || null, String(meta.display_phone_number || "").replace(/\D/g, "") || null, leadId).run()
+    .catch(() => env.DB.prepare("UPDATE leads SET last_inbound_at = ?, updated_at = ? WHERE id = ?").bind(at, now(), leadId).run()); // antes da migração 0007
   await deps.logEvent(env, leadId, "whatsapp_in", text);
   await markProcessed(env, m.id, leadId, "in");
   if (m.type !== "reaction") deps.onInbound?.(leadId, at);
@@ -142,8 +144,8 @@ async function handleInbound(env, m, contact, deps) {
  */
 const AUTO_SEGUNDOS = 60;
 async function mensagemAutomatica(env, lead, texto, at) {
+  if (texto.length < 40) return false; // "ok", "foi?", emoji: resposta rápida da equipe, não saudação automática
   if (lead.last_inbound_at && Date.parse(at) - Date.parse(lead.last_inbound_at) <= AUTO_SEGUNDOS * 1000) return true;
-  if (texto.length < 40) return false; // "ok", "bom dia": curtas demais para dizer que é automática
   const igual = await env.DB.prepare(
     "SELECT 1 FROM lead_events WHERE type = 'whatsapp_out' AND lead_id != ? AND text IN (?, ?) LIMIT 1"
   ).bind(lead.id, texto, texto + " (mensagem automática do app)").first();
@@ -208,7 +210,7 @@ export async function handleWhatsAppWebhook(request, env, deps) {
         const contacts = v.contacts || [];
         for (const m of v.messages || []) {
           const contact = contacts.find((c) => c.wa_id === m.from) || contacts[0];
-          await handleInbound(env, m, contact, deps);
+          await handleInbound(env, m, contact, deps, v.metadata);
         }
       } else if (change.field === "smb_message_echoes") {
         for (const m of v.message_echoes || []) await handleEcho(env, m, deps);

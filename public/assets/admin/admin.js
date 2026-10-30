@@ -244,6 +244,7 @@
     if (l.valor) tags.push('<span class="tag tag--val">' + brl(l.valor) + "</span>");
     if (l.perfil && l.perfil !== "Consumidor final") tags.push('<span class="tag">' + esc(l.perfil) + "</span>");
     if (l.canal_entrada === "whatsapp") tags.push('<span class="tag">WhatsApp direto</span>');
+    if (l.wa_canal) tags.push('<span class="tag" title="Número da loja pelo qual o cliente escreveu por último">📱 ' + esc(String(l.wa_canal).slice(-4)) + "</span>");
     if (l.canal_entrada === "tray") tags.push('<span class="tag">Comprou na loja</span>');
     if (l.ai_rascunho) tags.push('<span class="tag tag--ia">🤖 Resposta sugerida</span>');
     if (l.envios > 1) tags.push('<span class="tag">' + l.envios + " envios</span>");
@@ -580,9 +581,11 @@
 
   /* Envio de WhatsApp na ficha do lead */
   function waSendSection(l) {
-    var open = l.last_inbound_at && (Date.now() - new Date(l.last_inbound_at).getTime()) < 864e5;
+    var open = l.last_inbound_at && (Date.now() - new Date(l.last_inbound_at).getTime()) < 864e5 && !l.wa_outro_numero;
     return '<div class="d-sec"><h3>Enviar WhatsApp pelo CRM</h3>' +
-      '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (open
+      '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (l.wa_outro_numero
+        ? "📱 O cliente escreveu para o número do celular da loja (final " + esc(String(l.wa_canal || "").slice(-4)) + "): responda pelo celular. Pelo CRM, só com um modelo aprovado, que chega pelo número do CRM."
+        : open
         ? "✅ Janela de 24h aberta (cliente escreveu há " + ago(l.last_inbound_at) + "): pode mandar texto livre."
         : "⏳ Fora da janela de 24h: use um modelo aprovado para iniciar a conversa.") + "</p>" +
       (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' : "") +

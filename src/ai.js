@@ -16,7 +16,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSettings, setSettings } from "./settings.js";
 import { precoAtual } from "./products.js";
 import { stageLabel, PIPELINES } from "./crm.js";
-import { sendToLead } from "./wa-api.js";
+import { sendToLead, outroNumero } from "./wa-api.js";
+import { waConfig } from "./whatsapp.js";
 
 const MODEL = "claude-opus-5-5";
 const MODOS = ["desligado", "rascunho", "fora_horario", "automatico"];
@@ -417,7 +418,8 @@ export async function onInboundMessage(env, leadId, inboundAt, logEvent) {
   if (!lead || lead.ai_pausada || lead.stage === "ganho") return;
   if (lead.last_inbound_at && lead.last_inbound_at > inboundAt) return; // chegou mensagem mais nova: ela responde
 
-  const automatico = cfg.modo === "automatico" || (cfg.modo === "fora_horario" && !horarioEquipe());
+  // Cliente que escreveu para outro número da loja: a IA só sugere (o envio é feito pelo celular desse número)
+  const automatico = (cfg.modo === "automatico" || (cfg.modo === "fora_horario" && !horarioEquipe())) && !outroNumero(lead, await waConfig(env));
   try {
     const r = await gerar(env, { lead, msgs: await conversa(env, lead.id), tipo: automatico ? "automatico" : "rascunho", background: true });
     const atual = await env.DB.prepare("SELECT last_inbound_at, ai_pausada FROM leads WHERE id = ?").bind(leadId).first();

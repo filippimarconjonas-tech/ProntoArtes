@@ -16,6 +16,13 @@ async function requireConfig(env) {
   return cfg;
 }
 
+/** O cliente falou por outro número da loja (ex.: o do celular, em coexistência): o CRM não pode responder em texto livre. */
+export const outroNumero = (lead, cfg) => !!lead.wa_phone_id && !!cfg.phoneNumberId && lead.wa_phone_id !== cfg.phoneNumberId;
+const numeroBonito = (d) => {
+  const m = String(d || "").match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : "outro número da loja";
+};
+
 const within24h = (iso) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600 * 1000;
 
 /** Envia texto livre (dentro da janela de 24h) ou um modelo aprovado para o lead. */
@@ -39,6 +46,8 @@ export async function sendToLead(env, lead, body, user, logEvent) {
   } else {
     const text = String(body.text || "").trim().slice(0, 4096);
     if (!text) throw new ApiError("mensagem_vazia");
+    if (outroNumero(lead, cfg)) throw new ApiError("lead_outro_numero",
+      `O cliente escreveu para o ${numeroBonito(lead.wa_canal)}. Responda pelo celular desse número, ou envie um modelo para chamá-lo pelo número do CRM.`);
     if (!within24h(lead.last_inbound_at)) throw new ApiError("fora_da_janela_24h",
       "O cliente não mandou mensagem nas últimas 24h. Pela regra do WhatsApp, use um modelo aprovado.");
     payload = { messaging_product: "whatsapp", recipient_type: "individual", to: lead.whatsapp, type: "text", text: { preview_url: false, body: text } };

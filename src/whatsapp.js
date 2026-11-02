@@ -47,23 +47,29 @@ export function normalizeWaId(waId) {
   return normalizePhone(d);
 }
 
+// Mídias guardam o id da Meta no texto ("[imagem #m123…]") para o painel abrir o arquivo depois (a Meta guarda por ~30 dias)
+const MIDIAS = { image: "imagem", video: "vídeo", document: "documento", audio: "áudio", sticker: "figurinha" };
+
 function messageText(m) {
   if (!m) return "";
+  if (MIDIAS[m.type]) {
+    const md = m[m.type] || {};
+    const extra = md.caption || (m.type === "document" ? md.filename : "") || "";
+    return "[" + MIDIAS[m.type] + (/^\d+$/.test(md.id || "") ? " #m" + md.id : "") + "]" + (extra ? " " + extra : "");
+  }
   switch (m.type) {
     case "text": return m.text?.body || "";
     case "button": return m.button?.text || "";
     case "interactive": return m.interactive?.button_reply?.title || m.interactive?.list_reply?.title || "[resposta interativa]";
-    case "image": return "[imagem]" + (m.image?.caption ? " " + m.image.caption : "");
-    case "video": return "[vídeo]" + (m.video?.caption ? " " + m.video.caption : "");
-    case "document": return "[documento]" + (m.document?.caption ? " " + m.document.caption : "");
-    case "audio": return "[áudio]";
-    case "sticker": return "[figurinha]";
     case "location": return "[localização]";
     case "contacts": return "[contato compartilhado]";
     case "reaction": return "[reação " + (m.reaction?.emoji || "") + "]";
     default: return "[" + (m.type || "mensagem") + "]";
   }
 }
+
+/** Texto sem o id da mídia, para a IA e para o campo "mensagem" do lead. */
+export const semIdMidia = (t) => String(t || "").replace(/ #m\d+\]/g, "]");
 
 async function validSignature(request, raw, secret) {
   const header = request.headers.get("x-hub-signature-256") || "";
@@ -103,7 +109,7 @@ async function handleInbound(env, m, contact, deps) {
     const r = await deps.upsertLead(env, {
       nome: name || "Contato WhatsApp",
       whatsapp: phone,
-      mensagem: text,
+      mensagem: semIdMidia(text),
       origem: ref ? "Anúncio Click-to-WhatsApp" : "WhatsApp direto",
       utm_source: ref ? "meta_ads" : null,
       utm_medium: ref ? "click_to_whatsapp" : null,

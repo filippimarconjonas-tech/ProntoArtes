@@ -102,3 +102,21 @@ export async function deleteTemplate(env, name) {
   const cfg = await requireConfig(env);
   await graph(`/${cfg.wabaId}/message_templates?name=${encodeURIComponent(name)}`, { method: "DELETE", token: cfg.apiToken });
 }
+
+/**
+ * Entrega ao painel uma mídia recebida (foto, áudio, vídeo, documento), buscando na Meta na hora.
+ * Repassa o cabeçalho Range para o áudio/vídeo poder tocar no navegador.
+ */
+export async function midiaResponse(env, mediaId, request) {
+  const cfg = await requireConfig(env);
+  const info = await graph(`/${mediaId}`, { token: cfg.apiToken });
+  if (!info.url) throw new ApiError("midia_indisponivel");
+  const headers = { authorization: `Bearer ${cfg.apiToken}`, "user-agent": "Mozilla/5.0 ProntoArtesCRM" };
+  const range = request.headers.get("range");
+  if (range) headers.range = range;
+  const r = await fetch(info.url, { headers });
+  if (!r.ok && r.status !== 206) throw new ApiError("midia_indisponivel");
+  const out = new Headers({ "content-type": info.mime_type || r.headers.get("content-type") || "application/octet-stream", "cache-control": "private, max-age=86400" });
+  for (const h of ["content-length", "content-range", "accept-ranges"]) if (r.headers.get(h)) out.set(h, r.headers.get(h));
+  return new Response(r.body, { status: r.status, headers: out });
+}

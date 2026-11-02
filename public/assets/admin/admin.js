@@ -42,6 +42,26 @@
   function fromLocalInput(v) { return v ? new Date(v).toISOString() : null; }
   function firstName(n) { return (n || "").trim().split(/\s+/)[0] || ""; }
 
+  /* Fotos, áudios, vídeos e documentos do WhatsApp: o arquivo vem da Meta pelo CRM (/api/admin/midia/:id) */
+  function eventText(t) {
+    return esc(t).replace(/\[(imagem|vídeo|documento|áudio|figurinha) #m(\d+)\]/g, function (all, tipo, id) {
+      var src = "/api/admin/midia/" + id;
+      var media = tipo === "imagem" || tipo === "figurinha"
+        ? '<a href="' + src + '" target="_blank" rel="noopener"><img class="ev-midia" src="' + src + '" alt="' + tipo + '" loading="lazy"></a>'
+        : tipo === "áudio" ? '<audio class="ev-midia" controls preload="none" src="' + src + '"></audio>'
+        : tipo === "vídeo" ? '<video class="ev-midia" controls preload="metadata" src="' + src + '"></video>'
+        : "";
+      return '<span class="ev-wrap" data-tipo="' + tipo + '">' + media + '<a class="ev-link" href="' + src + '" target="_blank" rel="noopener">' +
+        (tipo === "documento" ? "📄 Abrir documento" : "Abrir " + tipo) + "</a></span>";
+    });
+  }
+  // Mídia que a Meta não entrega mais (mais de 30 dias) ou de um número sem acesso: troca por um aviso
+  document.addEventListener("error", function (e) {
+    var el = e.target, wrap = el && el.closest && el.closest(".ev-wrap");
+    if (!wrap || !/^(IMG|AUDIO|VIDEO)$/.test(el.tagName)) return;
+    wrap.innerHTML = '<span class="muted">[' + esc(wrap.getAttribute("data-tipo")) + " indisponível: veja no celular da loja]</span>";
+  }, true);
+
   var ERR = {
     informe_canal_fechamento: "Informe o canal de fechamento (site Tray ou WhatsApp).",
     informe_motivo_perda: "Informe o motivo da perda.",
@@ -1123,7 +1143,7 @@
           '<form class="note-form" id="note-form"><textarea name="text" placeholder="Registrar conversa, proposta enviada, objeção…" required></textarea><button class="btn btn--primary">Anotar</button></form>' +
           '<ul class="timeline">' + d.events.map(function (ev) {
             var who = ev.type === "ia" ? " · 🤖 IA" : ev.type === "whatsapp_out" && ev.user === "IA" ? " · 🤖 IA (WhatsApp)" : ev.type === "tray" ? " · 🛒 Loja Tray" : ev.type === "whatsapp_in" ? " · 💬 Cliente" : ev.type === "whatsapp_out" ? " · 🏪 Loja (WhatsApp)" : ev.user ? " · " + esc(ev.user) : "";
-            return '<li class="t-' + esc(ev.type) + '"><time>' + fmtDate(ev.created_at, true) + who + "</time>" + esc(ev.text) + "</li>";
+            return '<li class="t-' + esc(ev.type) + '"><time>' + fmtDate(ev.created_at, true) + who + "</time>" + eventText(ev.text) + "</li>";
           }).join("") + "</ul></div>" +
 
         '<div class="d-sec"><button class="btn btn--danger btn--sm" id="del-lead">Excluir lead</button></div>';

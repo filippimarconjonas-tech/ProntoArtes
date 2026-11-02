@@ -194,6 +194,10 @@ td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .timeline li { border-left: 3px solid var(--line); padding-left: 10px; font-size: 13px; }
 .timeline li.t-nota { border-color: var(--gold); }
 .timeline li.t-etapa { border-color: var(--brand); }
+.ev-wrap { display: block; margin-top: 4px; }
+.ev-midia { display: block; max-width: 240px; max-height: 240px; border-radius: 8px; margin-bottom: 2px; }
+audio.ev-midia { width: 260px; max-width: 100%; height: 36px; }
+.ev-link { font-size: 12px; }
 .timeline li.t-whatsapp_in { border-color: var(--wa); background: #f0faf4; padding: 6px 10px; border-radius: 0 8px 8px 0; }
 .timeline li.t-tray { border-color: #2f6fb3; background: #eef4fb; padding: 6px 10px; border-radius: 0 8px 8px 0; }
 .timeline li.t-whatsapp_out { border-color: #8aa; background: #f4f6f7; padding: 6px 10px; border-radius: 0 8px 8px 0; }

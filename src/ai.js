@@ -17,6 +17,7 @@ import { getSettings, setSettings } from "./settings.js";
 import { precoAtual } from "./products.js";
 import { stageLabel, PIPELINES } from "./crm.js";
 import { sendToLead } from "./wa-api.js";
+import { semIdMidia } from "./whatsapp.js";
 
 const MODEL = "claude-opus-5-5";
 const MODOS = ["desligado", "rascunho", "fora_horario", "automatico"];
@@ -239,7 +240,7 @@ async function conversa(env, leadId) {
   ).bind(leadId).all();
   return results.reverse().map((e) => ({
     de: e.type === "whatsapp_in" ? "cliente" : "loja",
-    texto: String(e.text || "").replace(/ \(enviado pelo CRM\)$/, ""),
+    texto: semIdMidia(e.text).replace(/ \(enviado pelo CRM\)$/, ""),
     em: e.created_at
   }));
 }

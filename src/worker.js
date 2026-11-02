@@ -16,7 +16,7 @@ import {
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
-import { sendToLead, listTemplates, createTemplate, deleteTemplate } from "./wa-api.js";
+import { sendToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
 import {
   aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
@@ -471,6 +471,11 @@ async function handleAdminApi(request, env, url) {
     const r = await completeEmbeddedSignup(env, url.origin, (await readJson(request)) || {});
     console.log("whatsapp_embedded", JSON.stringify(r));
     return json({ ok: true, conectado: r.ok, steps: r.steps, status: await whatsappStatus(env, url.origin) });
+  }
+  const md = path.match(/^\/midia\/(\d{5,30})$/);
+  if (md && method === "GET") {
+    try { return await midiaResponse(env, md[1], request); }
+    catch (err) { return json({ ok: false, error: "midia_indisponivel", message: err.message }, 404); }
   }
   if (path === "/whatsapp/diagnostico" && method === "POST") return json({ ok: true, ...(await diagnoseWhatsApp(env)) });
   if (path === "/whatsapp/connect" && method === "POST") {

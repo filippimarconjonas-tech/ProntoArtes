@@ -277,7 +277,7 @@ export async function saveWhatsAppSettings(env, body) {
   await setSettings(env, vals);
 }
 
-export async function graph(path, { method = "GET", token, form, json } = {}) {
+export async function graph(path, { method = "GET", token, form, json, body } = {}) {
   const url = new URL(GRAPH + path);
   const init = { method, headers: {} };
   if (token) init.headers.authorization = "Bearer " + token;
@@ -289,6 +289,7 @@ export async function graph(path, { method = "GET", token, form, json } = {}) {
     init.headers["content-type"] = "application/json";
     init.body = JSON.stringify(json);
   }
+  if (body) init.body = body; // FormData (upload de mídia): o fetch monta o multipart
   const res = await fetch(url, init);
   let data = null;
   try { data = await res.json(); } catch { /* sem corpo */ }

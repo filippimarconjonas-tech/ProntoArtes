@@ -605,7 +605,13 @@
       '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (open
         ? "✅ Janela de 24h aberta (cliente escreveu há " + ago(l.last_inbound_at) + "): pode mandar texto livre."
         : "⏳ Fora da janela de 24h: use um modelo aprovado para iniciar a conversa.") + "</p>" +
-      (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' : "") +
+      (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' +
+        '<form id="wa-file" class="wa-extra"><label class="fld"><span>📎 Foto, vídeo ou PDF</span><input type="file" name="file" accept="image/jpeg,image/png,video/mp4,application/pdf" required></label>' +
+          '<label class="fld"><span>Legenda (opcional)</span><input name="caption" maxlength="1024"></label>' +
+          '<button class="btn btn--wa btn--sm">Enviar arquivo</button> <span class="form-msg" id="wa-file-msg"></span></form>' +
+        '<form id="wa-prod" class="wa-extra"><label class="fld"><span>🖼️ Foto do produto do catálogo</span><input name="produto" list="wa-prod-list" placeholder="Digite o nome do produto…" autocomplete="off" required></label>' +
+          '<datalist id="wa-prod-list"></datalist>' +
+          '<button class="btn btn--wa btn--sm">Enviar foto do produto</button> <span class="form-msg" id="wa-prod-msg"></span></form>' : "") +
       '<form id="wa-tpl"><div class="grid2"><label class="fld"><span>Modelo</span><select name="template"><option value="">Carregando…</option></select></label><div id="wa-tpl-params"></div></div>' +
       '<p class="muted" id="wa-tpl-preview" style="font-size:12.5px;white-space:pre-wrap"></p>' +
       '<button class="btn btn--wa btn--sm">Enviar modelo</button> <span class="form-msg" id="wa-tpl-msg"></span></form></div>';
@@ -621,6 +627,52 @@
         .then(function () { toast("Mensagem enviada"); loadLeads().then(function () { render(); openLead(l.id); }); })
         .catch(function (err) { $("button", textForm).disabled = false; fail(err); });
     });
+
+    var reload = function () { loadLeads().then(function () { render(); openLead(l.id); }); };
+
+    // Foto, vídeo ou PDF do computador/celular: vai como multipart (não passa pelo api(), que é só JSON)
+    var fileForm = $("#wa-file");
+    if (fileForm) fileForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var file = fileForm.file.files[0], fmsg = $("#wa-file-msg");
+      if (!file) return;
+      var lim = /^video\//.test(file.type) ? 16 : file.type === "application/pdf" ? 100 : 5;
+      if (file.size > lim * 1048576) { fmsg.textContent = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; return; }
+      var fd = new FormData();
+      fd.append("file", file);
+      fd.append("caption", fileForm.caption.value);
+      $("button", fileForm).disabled = true;
+      fmsg.textContent = "Enviando…";
+      fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) { var er = new Error(d.error); er.code = d.error; er.serverMessage = d.message; throw er; }
+          toast("Arquivo enviado"); reload();
+        })
+        .catch(function (err) { $("button", fileForm).disabled = false; fmsg.textContent = ""; fail(err); });
+    });
+
+    // Foto do produto: o nome escolhido na lista vira o código do produto
+    var prodForm = $("#wa-prod"), prods = {};
+    if (prodForm) {
+      api("/products").then(function (d) {
+        var opts = d.products.filter(function (p) { return p.exibir && p.disponivel; }).map(function (p) {
+          var k = p.nome + " · " + brl(p.preco) + " · cód. " + p.id;
+          prods[k] = p.id;
+          return '<option value="' + esc(k) + '"></option>';
+        });
+        $("#wa-prod-list").innerHTML = opts.join("");
+      }).catch(function () {});
+      prodForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var id = prods[prodForm.produto.value], pmsg = $("#wa-prod-msg");
+        if (!id) { pmsg.textContent = "Escolha um produto da lista."; return; }
+        $("button", prodForm).disabled = true;
+        api("/leads/" + l.id + "/whatsapp", { method: "POST", body: { produto: id } })
+          .then(function () { toast("Foto do produto enviada"); reload(); })
+          .catch(function (err) { $("button", prodForm).disabled = false; fail(err); });
+      });
+    }
 
     var f = $("#wa-tpl"), sel = f.template, params = $("#wa-tpl-params"), prev = $("#wa-tpl-preview"), msg = $("#wa-tpl-msg");
     var list = [];

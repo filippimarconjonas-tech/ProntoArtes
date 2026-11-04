@@ -194,6 +194,7 @@ td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .timeline li { border-left: 3px solid var(--line); padding-left: 10px; font-size: 13px; }
 .timeline li.t-nota { border-color: var(--gold); }
 .timeline li.t-etapa { border-color: var(--brand); }
+.wa-extra { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ev-wrap { display: block; margin-top: 4px; }
 .ev-midia { display: block; max-width: 240px; max-height: 240px; border-radius: 8px; margin-bottom: 2px; }
 audio.ev-midia { width: 260px; max-width: 100%; height: 36px; }

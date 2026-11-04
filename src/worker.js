@@ -16,7 +16,7 @@ import {
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
-import { sendToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
+import { sendToLead, sendMediaToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
 import {
   aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
@@ -385,19 +385,28 @@ async function handleAdminApi(request, env, url) {
     }
     return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
   }
-  if (path.startsWith("/whatsapp/templates") || /^\/leads\/\d+\/whatsapp$/.test(path)) {
+  if (path.startsWith("/whatsapp/templates") || /^\/leads\/\d+\/whatsapp(\/midia)?$/.test(path)) {
     try {
       if (path === "/whatsapp/templates" && method === "GET") return json({ ok: true, templates: await listTemplates(env) });
       if (path === "/whatsapp/templates" && method === "POST") return json({ ok: true, ...(await createTemplate(env, (await readJson(request)) || {})) });
       const tm = path.match(/^\/whatsapp\/templates\/([a-z0-9_]+)$/);
       if (tm && method === "DELETE") { await deleteTemplate(env, tm[1]); return json({ ok: true }); }
+      const mm = path.match(/^\/leads\/(\d+)\/whatsapp\/midia$/);
+      if (mm && method === "POST") {
+        const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(+mm[1]).first();
+        if (!lead) return json({ ok: false, error: "not_found" }, 404);
+        const fd = await request.formData();
+        const r = await sendMediaToLead(env, lead, fd.get("file"), fd.get("caption"), user.username, logEvent);
+        await pauseOnHumanReply(env, lead.id);
+        return json({ ok: true, ...r });
+      }
       const lm = path.match(/^\/leads\/(\d+)\/whatsapp$/);
       if (lm && method === "POST") {
         const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(+lm[1]).first();
         if (!lead) return json({ ok: false, error: "not_found" }, 404);
         const body = (await readJson(request)) || {};
         const r = await sendToLead(env, lead, body, user.username, logEvent);
-        if (body.text) await pauseOnHumanReply(env, lead.id);
+        if (body.text || body.produto) await pauseOnHumanReply(env, lead.id);
         return json({ ok: true, ...r });
       }
     } catch (err) {

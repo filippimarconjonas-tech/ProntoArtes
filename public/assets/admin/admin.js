@@ -598,6 +598,36 @@
     });
   }
 
+  /* Avisos no WhatsApp da equipe: IA pediu vendedor (fora do horário) e cliente aguardando resposta */
+  var MODELO_STATUS = { APPROVED: "✅ aprovado pela Meta", PENDING: "⏳ em análise na Meta (pode levar até 1 dia)", REJECTED: "❌ recusado pela Meta", nao_criado: "ainda não criado: clique em Salvar" };
+  function renderAvisos() {
+    var box = $("#avisos-panel");
+    api("/avisos").then(function (st) {
+      box.innerHTML = '<h3>Avisos para a equipe</h3>' +
+        '<p class="muted" style="font-size:12.5px;margin:0 0 10px">O CRM manda um WhatsApp para a equipe quando a IA, fora do horário, passa um cliente para um vendedor, e quando um cliente está esperando resposta no horário de atendimento.</p>' +
+        '<form id="avisos-form">' +
+          '<label class="fld"><span>WhatsApp que recebe os avisos (separe com vírgula)</span><input name="numeros" value="' + esc(st.numeros_fmt.join(", ")) + '" placeholder="(24) 98115-3336"></label>' +
+          '<label class="fld"><span>Avisar quando o cliente esperar mais de (minutos)</span><input name="minutos" type="number" min="3" max="240" value="' + esc(st.minutos) + '"></label>' +
+          '<p class="muted" style="font-size:12.5px;margin:-4px 0 12px">Modelo de aviso: ' + esc(MODELO_STATUS[st.modelo] || st.modelo) + '. Enquanto não for aprovado, o aviso só chega se esse número tiver mandado mensagem para o número do CRM nas últimas 24h.</p>' +
+          '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--primary">Salvar</button><button type="button" class="btn btn--ghost" id="avisos-teste">Enviar aviso de teste</button></div>' +
+          '<p class="form-msg" id="avisos-msg"></p>' +
+        "</form>";
+      var f = $("#avisos-form"), msg = $("#avisos-msg");
+      f.addEventListener("submit", function (e) {
+        e.preventDefault();
+        api("/avisos", { method: "POST", body: { numeros: f.numeros.value, minutos: f.minutos.value } })
+          .then(function () { toast("Avisos salvos"); renderAvisos(); }).catch(fail);
+      });
+      $("#avisos-teste").addEventListener("click", function () {
+        var b = this; b.disabled = true; msg.textContent = "Enviando…";
+        api("/avisos/teste", { method: "POST", body: {} })
+          .then(function () { msg.textContent = "✅ Aviso de teste enviado. Confira o WhatsApp."; })
+          .catch(function (err) { msg.textContent = "❌ " + (err.serverMessage || err.code); })
+          .then(function () { b.disabled = false; });
+      });
+    }).catch(function (err) { box.innerHTML = '<h3>Avisos para a equipe</h3><p class="muted">' + esc(err.serverMessage || "Conecte o WhatsApp para usar os avisos.") + "</p>"; });
+  }
+
   /* Envio de WhatsApp na ficha do lead */
   function waSendSection(l) {
     var open = l.last_inbound_at && (Date.now() - new Date(l.last_inbound_at).getTime()) < 864e5;
@@ -605,7 +635,13 @@
       '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (open
         ? "✅ Janela de 24h aberta (cliente escreveu há " + ago(l.last_inbound_at) + "): pode mandar texto livre."
         : "⏳ Fora da janela de 24h: use um modelo aprovado para iniciar a conversa.") + "</p>" +
-      (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' : "") +
+      (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' +
+        '<form id="wa-file" class="wa-extra"><label class="fld"><span>📎 Foto, vídeo ou PDF</span><input type="file" name="file" accept="image/jpeg,image/png,video/mp4,application/pdf" required></label>' +
+          '<label class="fld"><span>Legenda (opcional)</span><input name="caption" maxlength="1024"></label>' +
+          '<button class="btn btn--wa btn--sm">Enviar arquivo</button> <span class="form-msg" id="wa-file-msg"></span></form>' +
+        '<form id="wa-prod" class="wa-extra"><label class="fld"><span>🖼️ Foto do produto do catálogo</span><input name="produto" list="wa-prod-list" placeholder="Digite o nome do produto…" autocomplete="off" required></label>' +
+          '<datalist id="wa-prod-list"></datalist>' +
+          '<button class="btn btn--wa btn--sm">Enviar foto do produto</button> <span class="form-msg" id="wa-prod-msg"></span></form>' : "") +
       '<form id="wa-tpl"><div class="grid2"><label class="fld"><span>Modelo</span><select name="template"><option value="">Carregando…</option></select></label><div id="wa-tpl-params"></div></div>' +
       '<p class="muted" id="wa-tpl-preview" style="font-size:12.5px;white-space:pre-wrap"></p>' +
       '<button class="btn btn--wa btn--sm">Enviar modelo</button> <span class="form-msg" id="wa-tpl-msg"></span></form></div>';
@@ -621,6 +657,52 @@
         .then(function () { toast("Mensagem enviada"); loadLeads().then(function () { render(); openLead(l.id); }); })
         .catch(function (err) { $("button", textForm).disabled = false; fail(err); });
     });
+
+    var reload = function () { loadLeads().then(function () { render(); openLead(l.id); }); };
+
+    // Foto, vídeo ou PDF do computador/celular: vai como multipart (não passa pelo api(), que é só JSON)
+    var fileForm = $("#wa-file");
+    if (fileForm) fileForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var file = fileForm.file.files[0], fmsg = $("#wa-file-msg");
+      if (!file) return;
+      var lim = /^video\//.test(file.type) ? 16 : file.type === "application/pdf" ? 100 : 5;
+      if (file.size > lim * 1048576) { fmsg.textContent = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; return; }
+      var fd = new FormData();
+      fd.append("file", file);
+      fd.append("caption", fileForm.caption.value);
+      $("button", fileForm).disabled = true;
+      fmsg.textContent = "Enviando…";
+      fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) { var er = new Error(d.error); er.code = d.error; er.serverMessage = d.message; throw er; }
+          toast("Arquivo enviado"); reload();
+        })
+        .catch(function (err) { $("button", fileForm).disabled = false; fmsg.textContent = ""; fail(err); });
+    });
+
+    // Foto do produto: o nome escolhido na lista vira o código do produto
+    var prodForm = $("#wa-prod"), prods = {};
+    if (prodForm) {
+      api("/products").then(function (d) {
+        var opts = d.products.filter(function (p) { return p.exibir && p.disponivel; }).map(function (p) {
+          var k = p.nome + " · " + brl(p.preco) + " · cód. " + p.id;
+          prods[k] = p.id;
+          return '<option value="' + esc(k) + '"></option>';
+        });
+        $("#wa-prod-list").innerHTML = opts.join("");
+      }).catch(function () {});
+      prodForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var id = prods[prodForm.produto.value], pmsg = $("#wa-prod-msg");
+        if (!id) { pmsg.textContent = "Escolha um produto da lista."; return; }
+        $("button", prodForm).disabled = true;
+        api("/leads/" + l.id + "/whatsapp", { method: "POST", body: { produto: id } })
+          .then(function () { toast("Foto do produto enviada"); reload(); })
+          .catch(function (err) { $("button", prodForm).disabled = false; fail(err); });
+      });
+    }
 
     var f = $("#wa-tpl"), sel = f.template, params = $("#wa-tpl-params"), prev = $("#wa-tpl-preview"), msg = $("#wa-tpl-msg");
     var list = [];
@@ -704,6 +786,8 @@
           '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--primary">Salvar</button><button type="button" class="btn btn--ghost" id="ia-reset">Restaurar texto padrão</button></div>' +
         "</form></div>" +
 
+        '<div class="panel" id="avisos-panel"><h3>Avisos para a equipe</h3><p class="muted">Carregando…</p></div>' +
+
         '<div class="panel panel--wide"><h3>Simulador de conversa</h3>' +
           '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Escreva como se fosse um cliente para ver como a IA responde. Nada é enviado no WhatsApp.</p>' +
           '<div class="chat" id="ia-chat">' + (SIM.length ? SIM.map(iaBubble).join("") : '<p class="empty">Ex.: “Boa tarde, vocês têm chafariz para jardim de uns 3 metros?”</p>') + "</div>" +
@@ -711,6 +795,7 @@
           '<button class="link" id="ia-clear">Limpar conversa</button>' +
         "</div></div>";
 
+      renderAvisos();
       var form = $("#ia-form");
       function hint() { var m = IA_MODOS.filter(function (x) { return x.id === form.modo.value; })[0]; $("#ia-modo-hint").textContent = m ? m.hint : ""; }
       form.modo.addEventListener("change", hint); hint();

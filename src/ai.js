@@ -18,6 +18,7 @@ import { precoAtual } from "./products.js";
 import { stageLabel, PIPELINES } from "./crm.js";
 import { sendToLead } from "./wa-api.js";
 import { semIdMidia } from "./whatsapp.js";
+import { avisosConfig, avisarTransferencia } from "./avisos.js";
 
 const MODEL = "claude-opus-5-5";
 const MODOS = ["desligado", "rascunho", "fora_horario", "automatico"];
@@ -416,6 +417,7 @@ export async function onInboundMessage(env, leadId, inboundAt, logEvent) {
   await sleep(3000);
   const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(leadId).first();
   if (!lead || lead.ai_pausada || lead.stage === "ganho") return;
+  if ((await avisosConfig(env)).numeros.includes(lead.whatsapp)) return; // número da equipe (recebe os avisos): a IA não responde
   if (lead.last_inbound_at && lead.last_inbound_at > inboundAt) return; // chegou mensagem mais nova: ela responde
 
   const automatico = cfg.modo === "automatico" || (cfg.modo === "fora_horario" && !horarioEquipe());
@@ -424,10 +426,15 @@ export async function onInboundMessage(env, leadId, inboundAt, logEvent) {
     const atual = await env.DB.prepare("SELECT last_inbound_at, ai_pausada FROM leads WHERE id = ?").bind(leadId).first();
     if (atual?.ai_pausada || (atual?.last_inbound_at && atual.last_inbound_at > inboundAt)) return;
 
-    if (!automatico || !r.resposta) return saveDraft(env, lead, r, logEvent);
+    if (!automatico || !r.resposta) {
+      await saveDraft(env, lead, r, logEvent);
+      if (automatico && r.transferir) await avisarTransferencia(env, lead, r.motivo, logEvent);
+      return;
+    }
     await sendToLead(env, lead, { text: r.resposta }, "IA", logEvent);
     await env.DB.prepare("UPDATE leads SET ai_draft = NULL, ai_draft_at = NULL WHERE id = ?").bind(lead.id).run();
     await registrar(env, lead, r, logEvent);
+    if (r.transferir) await avisarTransferencia(env, lead, r.motivo, logEvent);
   } catch (err) {
     console.error("ia_error", err?.code || "", err?.message);
     await logEvent(env, leadId, "ia", "A IA não conseguiu responder: " + (err?.message || "erro"), "IA");

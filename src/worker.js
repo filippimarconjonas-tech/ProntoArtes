@@ -16,6 +16,7 @@ import {
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
 import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
+import { avisosStatus, saveAvisos, enviarAviso, verificarAguardando } from "./avisos.js";
 import { sendToLead, sendMediaToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
 import {
@@ -28,6 +29,7 @@ const TRACK_FIELDS = ["origem", "pagina", "utm_source", "utm_medium", "utm_campa
 
 const now = () => new Date().toISOString();
 const CRON_CATALOGO = "0 9 * * *"; // 06:00 em Brasília (igual ao wrangler.jsonc)
+const CRON_AVISOS = "*/5 * * * *"; // cliente aguardando resposta (igual ao wrangler.jsonc)
 
 function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -414,6 +416,19 @@ async function handleAdminApi(request, env, url) {
     }
   }
 
+  if (path.startsWith("/avisos")) {
+    try {
+      if (path === "/avisos" && method === "GET") return json({ ok: true, ...(await avisosStatus(env)) });
+      if (path === "/avisos" && method === "POST") return json({ ok: true, ...(await saveAvisos(env, (await readJson(request)) || {})) });
+      if (path === "/avisos/teste" && method === "POST") {
+        const r = await enviarAviso(env, "teste de aviso enviado por " + user.username);
+        return r.enviados ? json({ ok: true, ...r }) : json({ ok: false, error: "aviso_falhou", message: r.erro }, 400);
+      }
+    } catch (err) {
+      return json({ ok: false, error: err.code || "erro_meta", message: err.message }, 400);
+    }
+  }
+
   if (path === "/ia" && method === "GET") return json({ ok: true, ...(await aiStatus(env)) });
   if (path.startsWith("/ia") || /^\/leads\/\d+\/ia\//.test(path)) {
     try {
@@ -560,9 +575,11 @@ async function serveAdminPage(request, env, url) {
 }
 
 export default {
-  // Cron Triggers (wrangler.jsonc): pedidos da Tray a cada 30 minutos; catálogo uma vez por dia
+  // Cron Triggers (wrangler.jsonc): pedidos da Tray a cada 30 minutos; catálogo uma vez por dia; avisos a cada 5 minutos
   async scheduled(event, env, ctx) {
-    const job = event.cron === CRON_CATALOGO
+    const job = event.cron === CRON_AVISOS
+      ? verificarAguardando(env, logEvent).catch((err) => console.error("avisos_cron_error", err?.message))
+      : event.cron === CRON_CATALOGO
       ? scheduledProdutosTray(env).catch((err) => console.error("tray_produtos_cron_error", err?.message))
       : scheduledTraySync(env, { upsertLead, logEvent }).catch((err) => console.error("tray_cron_error", err?.message));
     ctx.waitUntil(job);

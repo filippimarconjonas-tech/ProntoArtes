@@ -598,6 +598,36 @@
     });
   }
 
+  /* Avisos no WhatsApp da equipe: IA pediu vendedor (fora do horário) e cliente aguardando resposta */
+  var MODELO_STATUS = { APPROVED: "✅ aprovado pela Meta", PENDING: "⏳ em análise na Meta (pode levar até 1 dia)", REJECTED: "❌ recusado pela Meta", nao_criado: "ainda não criado: clique em Salvar" };
+  function renderAvisos() {
+    var box = $("#avisos-panel");
+    api("/avisos").then(function (st) {
+      box.innerHTML = '<h3>Avisos para a equipe</h3>' +
+        '<p class="muted" style="font-size:12.5px;margin:0 0 10px">O CRM manda um WhatsApp para a equipe quando a IA, fora do horário, passa um cliente para um vendedor, e quando um cliente está esperando resposta no horário de atendimento.</p>' +
+        '<form id="avisos-form">' +
+          '<label class="fld"><span>WhatsApp que recebe os avisos (separe com vírgula)</span><input name="numeros" value="' + esc(st.numeros_fmt.join(", ")) + '" placeholder="(24) 98115-3336"></label>' +
+          '<label class="fld"><span>Avisar quando o cliente esperar mais de (minutos)</span><input name="minutos" type="number" min="3" max="240" value="' + esc(st.minutos) + '"></label>' +
+          '<p class="muted" style="font-size:12.5px;margin:-4px 0 12px">Modelo de aviso: ' + esc(MODELO_STATUS[st.modelo] || st.modelo) + '. Enquanto não for aprovado, o aviso só chega se esse número tiver mandado mensagem para o número do CRM nas últimas 24h.</p>' +
+          '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--primary">Salvar</button><button type="button" class="btn btn--ghost" id="avisos-teste">Enviar aviso de teste</button></div>' +
+          '<p class="form-msg" id="avisos-msg"></p>' +
+        "</form>";
+      var f = $("#avisos-form"), msg = $("#avisos-msg");
+      f.addEventListener("submit", function (e) {
+        e.preventDefault();
+        api("/avisos", { method: "POST", body: { numeros: f.numeros.value, minutos: f.minutos.value } })
+          .then(function () { toast("Avisos salvos"); renderAvisos(); }).catch(fail);
+      });
+      $("#avisos-teste").addEventListener("click", function () {
+        var b = this; b.disabled = true; msg.textContent = "Enviando…";
+        api("/avisos/teste", { method: "POST", body: {} })
+          .then(function () { msg.textContent = "✅ Aviso de teste enviado. Confira o WhatsApp."; })
+          .catch(function (err) { msg.textContent = "❌ " + (err.serverMessage || err.code); })
+          .then(function () { b.disabled = false; });
+      });
+    }).catch(function (err) { box.innerHTML = '<h3>Avisos para a equipe</h3><p class="muted">' + esc(err.serverMessage || "Conecte o WhatsApp para usar os avisos.") + "</p>"; });
+  }
+
   /* Envio de WhatsApp na ficha do lead */
   function waSendSection(l) {
     var open = l.last_inbound_at && (Date.now() - new Date(l.last_inbound_at).getTime()) < 864e5;
@@ -756,6 +786,8 @@
           '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--primary">Salvar</button><button type="button" class="btn btn--ghost" id="ia-reset">Restaurar texto padrão</button></div>' +
         "</form></div>" +
 
+        '<div class="panel" id="avisos-panel"><h3>Avisos para a equipe</h3><p class="muted">Carregando…</p></div>' +
+
         '<div class="panel panel--wide"><h3>Simulador de conversa</h3>' +
           '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Escreva como se fosse um cliente para ver como a IA responde. Nada é enviado no WhatsApp.</p>' +
           '<div class="chat" id="ia-chat">' + (SIM.length ? SIM.map(iaBubble).join("") : '<p class="empty">Ex.: “Boa tarde, vocês têm chafariz para jardim de uns 3 metros?”</p>') + "</div>" +
@@ -763,6 +795,7 @@
           '<button class="link" id="ia-clear">Limpar conversa</button>' +
         "</div></div>";
 
+      renderAvisos();
       var form = $("#ia-form");
       function hint() { var m = IA_MODOS.filter(function (x) { return x.id === form.modo.value; })[0]; $("#ia-modo-hint").textContent = m ? m.hint : ""; }
       form.modo.addEventListener("change", hint); hint();

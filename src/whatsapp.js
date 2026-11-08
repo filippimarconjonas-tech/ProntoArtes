@@ -210,6 +210,10 @@ export async function handleWhatsAppWebhook(request, env, deps) {
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       const v = change.value || {};
+      // Só o número conectado ao CRM (8602) entra. Outro número que ainda mande webhooks ao app
+      // (o 0399 do celular da loja, em coexistência) é ignorado: as conversas dele ficam só no celular.
+      const doNumero = v.metadata?.phone_number_id;
+      if (doNumero && cfg.phoneNumberId && doNumero !== cfg.phoneNumberId) continue;
       if (change.field === "messages") {
         const contacts = v.contacts || [];
         for (const m of v.messages || []) {

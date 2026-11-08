@@ -344,8 +344,11 @@ async function handleAdminApi(request, env, url) {
   const user = await getSessionUser(request, env);
   if (!user) return json({ ok: false, error: "nao_autenticado" }, 401);
 
-  // Escritas exigem JSON (proteção extra contra CSRF, além do SameSite=Lax)
-  if (method !== "GET" && !(request.headers.get("content-type") || "").includes("application/json")) {
+  // Escritas exigem JSON (proteção extra contra CSRF, além do SameSite=Lax). O envio de arquivo é multipart:
+  // nele vale um cabeçalho próprio, que outro site não consegue mandar sem a permissão de CORS do CRM.
+  const ct = request.headers.get("content-type") || "";
+  const upload = /^\/leads\/\d+\/whatsapp\/midia$/.test(path) && ct.startsWith("multipart/form-data") && request.headers.get("x-crm-upload") === "1";
+  if (method !== "GET" && !ct.includes("application/json") && !upload) {
     return json({ ok: false, error: "content_type" }, 415);
   }
 

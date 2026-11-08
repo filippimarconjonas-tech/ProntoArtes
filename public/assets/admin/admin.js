@@ -673,7 +673,7 @@
       fd.append("caption", fileForm.caption.value);
       $("button", fileForm).disabled = true;
       fmsg.textContent = "Enviando…";
-      fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd })
+      fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd, headers: { "X-CRM-Upload": "1" } })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d.ok) { var er = new Error(d.error); er.code = d.error; er.serverMessage = d.message; throw er; }

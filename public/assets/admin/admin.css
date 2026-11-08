@@ -33,6 +33,8 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .btn--ghost { background: #fff; border-color: var(--line); color: var(--ink); }
 .btn--ghost:hover { border-color: var(--ink); }
 .btn--wa { background: var(--wa); color: #fff; }
+.btn--ia { background: #5b3fb8; color: #fff; }
+.btn--ia:hover { background: #4a3296; }
 .btn--danger { background: #fff; border-color: #f0c8c2; color: var(--danger); }
 .btn--block { width: 100%; }
 .btn--sm { padding: 6px 10px; font-size: 13px; }
@@ -223,6 +225,10 @@ audio.ev-midia { width: 260px; max-width: 100%; height: 36px; }
 .toast.is-err { background: var(--danger); }
 
 /* Atendimento com IA */
+.ia-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; margin: 0 0 10px; font-size: 13px; }
+.ia-status small { color: var(--soft); }
+.ia-status--pausada { background: #fff6e0; border: 1.5px solid #f0d58c; }
+.ia-status--ativa { background: #ece8fb; border: 1.5px solid #d6cdf5; }
 .tag--ia { background: #ece8fb; color: #5b3fb8; font-weight: 700; }
 .timeline li.t-ia { border-color: #7c5cd6; background: #f5f2fd; padding: 6px 10px; border-radius: 0 8px 8px 0; }
 .ia-draft { background: #f5f2fd; border: 1px solid #ddd3f7; border-radius: 10px; padding: 10px; }

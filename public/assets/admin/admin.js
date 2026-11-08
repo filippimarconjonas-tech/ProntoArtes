@@ -881,9 +881,11 @@
     var d = null;
     try { d = l.ai_draft ? JSON.parse(l.ai_draft) : null; } catch (e) { d = null; }
     return '<div class="d-sec" id="ia-sec"><h3>Atendimento com IA</h3>' +
-      '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (l.ai_pausada
-        ? '⏸️ IA pausada neste lead (um vendedor assumiu). <button class="link" data-ia-ativa="1">Reativar IA</button>'
-        : '🤖 IA ativa neste lead. <button class="link" data-ia-ativa="0">Pausar IA</button>') + "</p>" +
+      (l.ai_pausada
+        ? '<div class="ia-status ia-status--pausada"><span><strong>⏸️ IA pausada neste cliente</strong><br><small>Um vendedor assumiu a conversa. A IA não responde até ser reativada.</small></span>' +
+          '<button class="btn btn--ia btn--sm" data-ia-ativa="1">▶️ Reativar IA</button></div>'
+        : '<div class="ia-status ia-status--ativa"><span><strong>🤖 IA ativa neste cliente</strong><br><small>Ela responde conforme o modo escolhido em Atendimento IA.</small></span>' +
+          '<button class="btn btn--ghost btn--sm" data-ia-ativa="0">⏸️ Pausar IA</button></div>') +
       (d ? '<div class="ia-draft">' +
           '<p class="muted" style="font-size:12px;margin:0 0 6px">Sugestão de ' + fmtDate(l.ai_draft_at, true) +
             (d.transferir ? ' · <strong style="color:var(--danger)">recomenda passar para um vendedor' + (d.motivo ? ": " + esc(d.motivo) : "") + "</strong>" : "") + "</p>" +

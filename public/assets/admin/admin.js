@@ -598,6 +598,32 @@
     });
   }
 
+  /*
+   * Foto do celular: reduz para no máximo 2048 px no lado maior e JPG (como o próprio WhatsApp faz),
+   * baixando a qualidade até caber em 4,5 MB. Fotos já pequenas vão como estão.
+   */
+  function reduzirFoto(file) {
+    var MAX_LADO = 2048, MAX_BYTES = 4.5 * 1048576;
+    if (file.size <= 1.5 * 1048576 && /^image\/(jpeg|png)$/.test(file.type)) return Promise.resolve(file);
+    if (!window.createImageBitmap) return Promise.resolve(file);
+    return createImageBitmap(file, { imageOrientation: "from-image" }).then(function (img) {
+      var escala = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
+      var c = document.createElement("canvas");
+      c.width = Math.round(img.width * escala); c.height = Math.round(img.height * escala);
+      var ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); // PNG com transparência fica com fundo branco
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      var nome = (file.name || "foto").replace(/\.[^.]+$/, "") + ".jpg";
+      function gerar(q) {
+        return new Promise(function (ok) { c.toBlob(ok, "image/jpeg", q); }).then(function (blob) {
+          if (blob.size > MAX_BYTES && q > 0.5) return gerar(q - 0.1);
+          return new File([blob], nome, { type: "image/jpeg" });
+        });
+      }
+      return gerar(0.85);
+    }).catch(function () { return file; }); // formato que o navegador não abre: tenta enviar o original
+  }
+
   /* Avisos no WhatsApp da equipe: IA pediu vendedor (fora do horário) e cliente aguardando resposta */
   var MODELO_STATUS = { APPROVED: "✅ aprovado pela Meta", PENDING: "⏳ em análise na Meta (pode levar até 1 dia)", REJECTED: "❌ recusado pela Meta", nao_criado: "ainda não criado: clique em Salvar" };
   function renderAvisos() {
@@ -636,7 +662,7 @@
         ? "✅ Janela de 24h aberta (cliente escreveu há " + ago(l.last_inbound_at) + "): pode mandar texto livre."
         : "⏳ Fora da janela de 24h: use um modelo aprovado para iniciar a conversa.") + "</p>" +
       (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' +
-        '<form id="wa-file" class="wa-extra"><label class="fld"><span>📎 Foto, vídeo ou PDF</span><input type="file" name="file" accept="image/jpeg,image/png,video/mp4,application/pdf" required></label>' +
+        '<form id="wa-file" class="wa-extra"><label class="fld"><span>📎 Foto, vídeo ou PDF</span><input type="file" name="file" accept="image/*,video/mp4,application/pdf" required></label>' +
           '<label class="fld"><span>Legenda (opcional)</span><input name="caption" maxlength="1024"></label>' +
           '<button class="btn btn--wa btn--sm">Enviar arquivo</button> <span class="form-msg" id="wa-file-msg"></span></form>' +
         '<form id="wa-prod" class="wa-extra"><label class="fld"><span>🖼️ Foto do produto do catálogo</span><input name="produto" list="wa-prod-list" placeholder="Digite o nome do produto…" autocomplete="off" required></label>' +
@@ -666,14 +692,20 @@
       e.preventDefault();
       var file = fileForm.file.files[0], fmsg = $("#wa-file-msg");
       if (!file) return;
+      var foto = /^image\//.test(file.type);
       var lim = /^video\//.test(file.type) ? 16 : file.type === "application/pdf" ? 100 : 5;
-      if (file.size > lim * 1048576) { fmsg.textContent = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; return; }
-      var fd = new FormData();
-      fd.append("file", file);
-      fd.append("caption", fileForm.caption.value);
+      if (!foto && file.size > lim * 1048576) { fmsg.textContent = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; return; }
       $("button", fileForm).disabled = true;
-      fmsg.textContent = "Enviando…";
-      fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd, headers: { "X-CRM-Upload": "1" } })
+      fmsg.textContent = foto ? "Preparando a foto…" : "Enviando…";
+      (foto ? reduzirFoto(file) : Promise.resolve(file))
+        .then(function (arq) {
+          if (arq.size > lim * 1048576) { var e0 = new Error("grande"); e0.serverMessage = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; throw e0; }
+          var fd = new FormData();
+          fd.append("file", arq, arq.name || file.name);
+          fd.append("caption", fileForm.caption.value);
+          fmsg.textContent = "Enviando…";
+          return fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd, headers: { "X-CRM-Upload": "1" } });
+        })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d.ok) { var er = new Error(d.error); er.code = d.error; er.serverMessage = d.message; throw er; }

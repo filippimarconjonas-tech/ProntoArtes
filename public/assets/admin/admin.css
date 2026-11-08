@@ -194,6 +194,11 @@ td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .timeline li { border-left: 3px solid var(--line); padding-left: 10px; font-size: 13px; }
 .timeline li.t-nota { border-color: var(--gold); }
 .timeline li.t-etapa { border-color: var(--brand); }
+.wa-composer { display: flex; gap: 8px; align-items: stretch; }
+.wa-composer textarea { flex: 1; border: 1.5px solid var(--line); border-radius: 9px; padding: 8px 10px; min-height: 44px; resize: vertical; }
+.wa-clip { display: flex; align-items: center; justify-content: center; width: 44px; border: 1.5px solid var(--line); border-radius: 9px; font-size: 20px; cursor: pointer; background: #fff; }
+.wa-clip:hover { border-color: var(--wa); }
+.wa-anexo { margin: 6px 0 0; font-size: 13px; }
 .wa-extra { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ev-wrap { display: block; margin-top: 4px; }
 .ev-midia { display: block; max-width: 240px; max-height: 240px; border-radius: 8px; margin-bottom: 2px; }

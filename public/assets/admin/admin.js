@@ -661,10 +661,9 @@
       '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + (open
         ? "✅ Janela de 24h aberta (cliente escreveu há " + ago(l.last_inbound_at) + "): pode mandar texto livre."
         : "⏳ Fora da janela de 24h: use um modelo aprovado para iniciar a conversa.") + "</p>" +
-      (open ? '<form id="wa-text" class="note-form"><textarea name="text" placeholder="Escreva a mensagem…" required></textarea><button class="btn btn--wa">Enviar</button></form>' +
-        '<form id="wa-file" class="wa-extra"><label class="fld"><span>📎 Foto, vídeo ou PDF</span><input type="file" name="file" accept="image/*,video/mp4,application/pdf" required></label>' +
-          '<label class="fld"><span>Legenda (opcional)</span><input name="caption" maxlength="1024"></label>' +
-          '<button class="btn btn--wa btn--sm">Enviar arquivo</button> <span class="form-msg" id="wa-file-msg"></span></form>' +
+      (open ? '<form id="wa-text" class="wa-composer"><label class="wa-clip" title="Anexar foto, vídeo ou PDF">📎<input type="file" name="file" accept="image/*,video/mp4,application/pdf" hidden></label>' +
+          '<textarea name="text" placeholder="Escreva a mensagem… (com anexo, vira a legenda)"></textarea><button class="btn btn--wa">Enviar</button></form>' +
+        '<p class="wa-anexo" id="wa-anexo" hidden></p><p class="form-msg" id="wa-file-msg"></p>' +
         '<form id="wa-prod" class="wa-extra"><label class="fld"><span>🖼️ Foto do produto do catálogo</span><input name="produto" list="wa-prod-list" placeholder="Digite o nome do produto…" autocomplete="off" required></label>' +
           '<datalist id="wa-prod-list"></datalist>' +
           '<button class="btn btn--wa btn--sm">Enviar foto do produto</button> <span class="form-msg" id="wa-prod-msg"></span></form>' : "") +
@@ -674,45 +673,53 @@
   }
 
   function bindWaSend(l) {
-    var textForm = $("#wa-text");
-    if (textForm) textForm.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var t = textForm.text.value.trim(); if (!t) return;
-      $("button", textForm).disabled = true;
-      api("/leads/" + l.id + "/whatsapp", { method: "POST", body: { text: t } })
-        .then(function () { toast("Mensagem enviada"); loadLeads().then(function () { render(); openLead(l.id); }); })
-        .catch(function (err) { $("button", textForm).disabled = false; fail(err); });
-    });
-
     var reload = function () { loadLeads().then(function () { render(); openLead(l.id); }); };
 
-    // Foto, vídeo ou PDF do computador/celular: vai como multipart (não passa pelo api(), que é só JSON)
-    var fileForm = $("#wa-file");
-    if (fileForm) fileForm.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var file = fileForm.file.files[0], fmsg = $("#wa-file-msg");
-      if (!file) return;
-      var foto = /^image\//.test(file.type);
-      var lim = /^video\//.test(file.type) ? 16 : file.type === "application/pdf" ? 100 : 5;
-      if (!foto && file.size > lim * 1048576) { fmsg.textContent = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; return; }
-      $("button", fileForm).disabled = true;
-      fmsg.textContent = foto ? "Preparando a foto…" : "Enviando…";
-      (foto ? reduzirFoto(file) : Promise.resolve(file))
-        .then(function (arq) {
-          if (arq.size > lim * 1048576) { var e0 = new Error("grande"); e0.serverMessage = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; throw e0; }
-          var fd = new FormData();
-          fd.append("file", arq, arq.name || file.name);
-          fd.append("caption", fileForm.caption.value);
-          fmsg.textContent = "Enviando…";
-          return fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd, headers: { "X-CRM-Upload": "1" } });
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (!d.ok) { var er = new Error(d.error); er.code = d.error; er.serverMessage = d.message; throw er; }
-          toast("Arquivo enviado"); reload();
-        })
-        .catch(function (err) { $("button", fileForm).disabled = false; fmsg.textContent = ""; fail(err); });
-    });
+    // Caixa única: texto sozinho vai como mensagem; com anexo (📎), o texto vira a legenda do arquivo
+    var textForm = $("#wa-text");
+    if (textForm) {
+      var fileIn = textForm.file, anexo = $("#wa-anexo"), fmsg = $("#wa-file-msg");
+      var mostrarAnexo = function () {
+        var f = fileIn.files[0];
+        anexo.hidden = !f;
+        anexo.innerHTML = f ? "📎 " + esc(f.name) + ' <button type="button" class="link" id="wa-anexo-x">remover</button>' : "";
+        if (f) $("#wa-anexo-x").addEventListener("click", function () { fileIn.value = ""; mostrarAnexo(); });
+      };
+      fileIn.addEventListener("change", mostrarAnexo);
+      textForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var t = textForm.text.value.trim(), file = fileIn.files[0], btn = $("button.btn", textForm);
+        fmsg.textContent = "";
+        if (!file) {
+          if (!t) return;
+          btn.disabled = true;
+          return api("/leads/" + l.id + "/whatsapp", { method: "POST", body: { text: t } })
+            .then(function () { toast("Mensagem enviada"); reload(); })
+            .catch(function (err) { btn.disabled = false; fail(err); });
+        }
+        // Foto, vídeo ou PDF: vai como multipart (não passa pelo api(), que é só JSON)
+        var foto = /^image\//.test(file.type);
+        var lim = /^video\//.test(file.type) ? 16 : file.type === "application/pdf" ? 100 : 5;
+        if (!foto && file.size > lim * 1048576) { fmsg.textContent = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; return; }
+        btn.disabled = true;
+        fmsg.textContent = foto ? "Preparando a foto…" : "Enviando…";
+        (foto ? reduzirFoto(file) : Promise.resolve(file))
+          .then(function (arq) {
+            if (arq.size > lim * 1048576) { var e0 = new Error("grande"); e0.serverMessage = "Arquivo grande demais: o WhatsApp aceita até " + lim + " MB."; throw e0; }
+            var fd = new FormData();
+            fd.append("file", arq, arq.name || file.name);
+            fd.append("caption", t);
+            fmsg.textContent = "Enviando…";
+            return fetch("/api/admin/leads/" + l.id + "/whatsapp/midia", { method: "POST", body: fd, headers: { "X-CRM-Upload": "1" } });
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) { var er = new Error(d.error); er.code = d.error; er.serverMessage = d.message; throw er; }
+            toast("Arquivo enviado"); reload();
+          })
+          .catch(function (err) { btn.disabled = false; fmsg.textContent = ""; fail(err); });
+      });
+    }
 
     // Foto do produto: o nome escolhido na lista vira o código do produto
     var prodForm = $("#wa-prod"), prods = {};

@@ -239,11 +239,18 @@
   }
 
   /* ---------------- kanban ---------------- */
-  var FAIXA_ORDER = { A: 0, B: 1, C: 2 };
+  // Última atividade do lead: a mensagem mais recente (do cliente ou da loja) ou, sem mensagens, a entrada
+  function atividade(l) {
+    return [l.last_inbound_at, l.last_outbound_at, l.created_at].filter(Boolean).sort().pop() || "";
+  }
+  // Mais recente primeiro: quem acabou de mandar mensagem fica no topo da coluna e da lista
   function sortLeads(list) {
-    return list.sort(function (a, b) {
-      return (FAIXA_ORDER[a.faixa] - FAIXA_ORDER[b.faixa]) || (b.score - a.score) || (a.created_at < b.created_at ? -1 : 1);
-    });
+    return list.sort(function (a, b) { var x = atividade(a), y = atividade(b); return x < y ? 1 : x > y ? -1 : 0; });
+  }
+  function ultimaMsg(l) {
+    var inn = l.last_inbound_at, out = l.last_outbound_at;
+    if (!inn && !out) return "";
+    return inn && (!out || inn >= out) ? "💬 Cliente · " + fmtDate(inn, true) : "🏪 Loja · " + fmtDate(out, true);
   }
 
   function cardTags(l) {
@@ -277,6 +284,7 @@
       '<div class="card__top"><span class="card__name">' + esc(l.nome) + '</span><span class="fx fx-' + esc(l.faixa) + '" title="Score ' + l.score + '">' + esc(l.faixa) + "</span></div>" +
       '<div class="card__meta">' + esc(l.produto || l.interesse || "Interesse não informado") + "</div>" +
       '<div class="card__meta">' + esc(l.cidade || "") + (l.cidade ? " · " : "") + esc(l.prazo || "prazo n/i") + "</div>" +
+      (ultimaMsg(l) ? '<div class="card__meta card__last">Última mensagem: ' + esc(ultimaMsg(l)) + "</div>" : "") +
       '<div class="card__tags">' + cardTags(l) + "</div></article>";
   }
 
@@ -1110,17 +1118,17 @@
 
   /* ---------------- lista ---------------- */
   function renderList() {
-    var list = filtered();
+    var list = sortLeads(filtered().slice());
     $("#view").innerHTML = '<div class="table-wrap"><table><thead><tr>' +
-      "<th>Entrada</th><th>Faixa</th><th>Nome</th><th>WhatsApp</th><th>Cidade</th><th>Interesse / produto</th><th>Prazo</th><th>Etapa</th><th>Valor</th><th>Origem</th>" +
+      "<th>Última mensagem</th><th>Entrada</th><th>Faixa</th><th>Nome</th><th>WhatsApp</th><th>Cidade</th><th>Interesse / produto</th><th>Prazo</th><th>Etapa</th><th>Valor</th><th>Origem</th>" +
       "</tr></thead><tbody>" + (list.map(function (l) {
         var si = stageInfo(l.pipeline, l.stage);
-        return '<tr data-id="' + l.id + '"><td>' + fmtDate(l.created_at, true) + '</td><td><span class="fx fx-' + esc(l.faixa) + '">' + esc(l.faixa) + "</span> " + l.score +
+        return '<tr data-id="' + l.id + '"><td class="nowrap">' + esc(ultimaMsg(l) || "—") + "</td><td>" + fmtDate(l.created_at, true) + '</td><td><span class="fx fx-' + esc(l.faixa) + '">' + esc(l.faixa) + "</span> " + l.score +
           "</td><td>" + esc(l.nome) + "</td><td>" + esc(phoneFmt(l.whatsapp)) + "</td><td>" + esc(l.cidade || "") +
           '</td><td class="trunc">' + esc(l.produto || l.interesse || "") + "</td><td>" + esc(l.prazo || "") +
           "</td><td>" + esc(si.stage) + (l.stage === "ganho" && l.post_stage ? " · " + esc(postLabel(l.post_stage)) : "") +
           "</td><td>" + (l.valor ? brl(l.valor) : "") + '</td><td class="trunc">' + esc(l.utm_source || l.origem || "") + "</td></tr>";
-      }).join("") || '<tr><td colspan="10" class="empty">Nenhum lead encontrado.</td></tr>') + "</tbody></table></div>";
+      }).join("") || '<tr><td colspan="11" class="empty">Nenhum lead encontrado.</td></tr>') + "</tbody></table></div>";
     $$("tbody tr[data-id]").forEach(function (tr) { tr.addEventListener("click", function () { openLead(+tr.getAttribute("data-id")); }); });
   }
 
@@ -1420,7 +1428,7 @@
     updateWaDot();
   }).catch(fail);
 
-  // Atualiza a cada 60s para mostrar leads novos (sem atrapalhar quem está editando)
+  // Atualiza a cada 30s para mostrar leads e mensagens novas (sem atrapalhar quem está editando)
   setInterval(function () {
     if (!$("#drawer").hidden || !$("#modal").hidden || document.hidden) return;
     var before = S.leads.length;
@@ -1428,5 +1436,5 @@
       if (S.leads.length > before) toast((S.leads.length - before) + " novo(s) lead(s)");
       if (S.view !== "dashboard") render();
     }).catch(function () {});
-  }, 60000);
+  }, 30000);
 })();

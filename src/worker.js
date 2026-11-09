@@ -517,7 +517,7 @@ async function handleAdminApi(request, env, url) {
               pipeline, stage, stage_changed_at, post_stage, next_followup_at, valor, canal_fechamento, motivo_perda,
               origem, canal_entrada, utm_source, envios, first_contact_at, last_inbound_at, last_outbound_at,
               ai_pausada, CASE WHEN ai_draft IS NULL THEN 0 ELSE 1 END AS ai_rascunho
-         FROM leads ORDER BY created_at DESC LIMIT 2000`
+         FROM leads ORDER BY MAX(COALESCE(last_inbound_at, ''), COALESCE(last_outbound_at, ''), created_at) DESC LIMIT 2000`
     ).all();
     return json({ ok: true, leads: results });
   }

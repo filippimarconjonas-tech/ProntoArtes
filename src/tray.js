@@ -117,6 +117,24 @@ function classify(status) {
   return { kind: "outro" };
 }
 
+/*
+ * Datas reais do pedido. A Tray manda date ("2026-08-12") e hour ("14:33:20") no horário de Brasília, e
+ * payment_date quando foi pago ("0000-00-00" se não). O CRM usa essas datas, e não a hora em que leu o
+ * pedido: um pedido antigo que muda de status (ex.: entregue) não pode virar venda ou lead "de hoje".
+ */
+function quandoTray(dia, hora) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia || "") || String(dia).startsWith("0000")) return null;
+  const h = /^\d{2}:\d{2}:\d{2}$/.test(hora || "") ? hora : /^\d{2}:\d{2}$/.test(hora || "") ? hora + ":00" : "12:00:00";
+  const d = new Date(`${dia}T${h}-03:00`);
+  return isNaN(d) || d.getTime() > Date.now() + 60000 ? null : d.toISOString();
+}
+function datasPedido(o) {
+  const pedidoEm = quandoTray(o.date, o.hour);
+  const pagoEm = o.payment_date === o.date ? pedidoEm : quandoTray(o.payment_date, null);
+  return { pedidoEm, pagoEm: pagoEm || pedidoEm };
+}
+const diaBR = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
 const POST_ORDER = ["pago", "separacao", "enviado", "entregue", "recompra"];
 const POST_LABEL = { pago: "Pedido pago", separacao: "Separação / produção", enviado: "Enviado", entregue: "Entregue" };
 
@@ -173,6 +191,10 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
   const total = Number(o.total) || null;
   const status = o.status || "";
   const cls = classify(status);
+  const { pedidoEm, pagoEm } = datasPedido(o);
+  const agora = now();
+  // Pedido de mais de 2 dias atrás: o histórico diz de quando ele é
+  const doDia = pedidoEm && Date.now() - Date.parse(pedidoEm) > 2 * 86400000 ? ` de ${diaBR(pedidoEm)}` : "";
   if (lead && map.status === status) return { pedido, status, lead_id: lead.id, acao: "sem mudanças" };
 
   if (!lead) {
@@ -189,9 +211,19 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
     if (phone.length >= 12) lead = await env.DB.prepare("SELECT * FROM leads WHERE whatsapp = ? ORDER BY id DESC LIMIT 1").bind(phone).first();
     if (!lead && email) lead = await env.DB.prepare("SELECT * FROM leads WHERE lower(email) = ? ORDER BY id DESC LIMIT 1").bind(email).first();
 
-    // Cliente que já fechou outra venda: este pedido é uma recompra e vira nova oportunidade
+    // Cliente que já fechou outra venda: um pedido mais novo é recompra e vira nova oportunidade;
+    // um pedido anterior à venda registrada só entra no histórico do cliente
     let recompra = false;
     if (lead && lead.stage === "ganho" && lead.pedido_tray && lead.pedido_tray !== pedido) {
+      if (pedidoEm && lead.won_at && pedidoEm < lead.won_at) {
+        await env.DB.prepare(
+          `INSERT INTO tray_orders (pedido, lead_id, status) VALUES (?, ?, ?)
+           ON CONFLICT(pedido) DO UPDATE SET lead_id = excluded.lead_id, status = excluded.status, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`
+        ).bind(pedido, lead.id, status).run();
+        const txt = `Pedido anterior na Tray: nº ${pedido}${pedidoEm ? " de " + diaBR(pedidoEm) : ""} (${status})${total ? " · R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : ""}.`;
+        await deps.logEvent(env, lead.id, "tray", txt, "Tray");
+        return { pedido, status, lead_id: lead.id, acao: txt };
+      }
       recompra = true;
       lead = null;
     }
@@ -205,6 +237,8 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
         cidade: [c?.city, c?.state].filter(Boolean).join("/") || null,
         origem: recompra ? "Recompra na loja Tray" : "Loja Tray (comprou direto no site)"
       }, { canal: "tray" });
+      // O cliente entrou no dia da compra, não no dia em que o CRM leu o pedido
+      if (pedidoEm) await env.DB.prepare("UPDATE leads SET created_at = ? WHERE id = ? AND created_at > ?").bind(pedidoEm, r.id, pedidoEm).run();
       lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(r.id).first();
     }
   }
@@ -216,22 +250,22 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
     if (!u.meta?.changes) return { pedido, status, lead_id: lead.id, acao: "já atualizado por outra notificação" };
   }
 
-  const at = now();
   const sets = {};
   const events = [];
-  if (!map || map.lead_id !== lead.id) events.push(`Pedido Tray nº ${pedido} vinculado (${status}).`);
+  if (!map || map.lead_id !== lead.id) events.push(`Pedido Tray nº ${pedido}${doDia} vinculado (${status}).`);
   if (cls.kind !== "cancelado" && lead.pedido_tray !== pedido) sets.pedido_tray = pedido;
   if (total && cls.kind !== "cancelado" && lead.valor !== total) sets.valor = total;
 
   if (cls.kind === "aguardando" && !["pagamento", "ganho"].includes(lead.stage)) {
-    Object.assign(sets, { pipeline: "vendas", stage: "pagamento", stage_changed_at: at, canal_fechamento: "site_tray" });
+    Object.assign(sets, { pipeline: "vendas", stage: "pagamento", stage_changed_at: pedidoEm || agora, canal_fechamento: "site_tray" });
     events.push(`Pedido ${pedido} criado na loja (${status}) → Aguardando pagamento.`);
   }
 
   if (cls.kind === "pago") {
     if (lead.stage !== "ganho") {
-      Object.assign(sets, { pipeline: "vendas", stage: "ganho", stage_changed_at: at, won_at: at, lost_at: null, canal_fechamento: "site_tray" });
-      events.push(`Pagamento do pedido ${pedido} confirmado na Tray (${status}) → Venda fechada.`);
+      const venda = pagoEm || agora;
+      Object.assign(sets, { pipeline: "vendas", stage: "ganho", stage_changed_at: venda, won_at: venda, lost_at: null, canal_fechamento: "site_tray" });
+      events.push(`Pagamento do pedido ${pedido}${doDia} confirmado na Tray (${status}) → Venda fechada${pagoEm ? " em " + diaBR(pagoEm) : ""}.`);
     }
     const cur = POST_ORDER.indexOf(lead.post_stage || "");
     if (POST_ORDER.indexOf(cls.post) > cur) {
@@ -244,7 +278,7 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
   else if (map && map.status !== status && !events.length) events.push(`Pedido ${pedido}: status na Tray mudou para ${status}.`);
 
   if (Object.keys(sets).length) {
-    sets.updated_at = at;
+    sets.updated_at = agora;
     const keys = Object.keys(sets);
     await env.DB.prepare(`UPDATE leads SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...keys.map((k) => sets[k]), lead.id).run();
   }
@@ -639,4 +673,42 @@ export async function coletarEvidencias(env) {
   };
   await setSettings(env, { tray_evidencias: JSON.stringify(resultado) });
   return { ok: true, rotas: itens.map((i) => ({ nome: i.nome, metodo: i.metodo, status: i.status })), tem_notificacao: !!resultado.ultima_notificacao };
+}
+
+/**
+ * Corrige as datas dos leads que vieram da Tray antes de o CRM usar a data real do pedido:
+ * venda (won_at) = data do pagamento e entrada (created_at) = data da compra. Lê um pedido por lead,
+ * até o limite de chamadas por execução; o painel chama de novo até não restar nenhum.
+ */
+export async function corrigirDatasTray(env) {
+  const s = await getSettings(env, ["tray_datas_corrigidas"]);
+  const feitos = new Set(JSON.parse(s.tray_datas_corrigidas || "[]"));
+  const { results } = await env.DB.prepare(
+    "SELECT id, pedido_tray, created_at, won_at, stage, canal_entrada FROM leads WHERE canal_fechamento = 'site_tray' AND pedido_tray IS NOT NULL ORDER BY id"
+  ).all();
+  const fila = results.filter((l) => !feitos.has(l.id));
+  const orcamento = { resta: LIMITE_CHAMADAS - 4 };
+  let corrigidos = 0, erros = 0;
+  for (const l of fila) {
+    let o;
+    try { o = (await api(env, `/orders/${encodeURIComponent(l.pedido_tray)}`, orcamento))?.Order; }
+    catch (err) {
+      if (err instanceof SemOrcamento) break;
+      if (!(err instanceof TrayError) || err.status !== 404) throw err; // Tray fora do ar ou sem autorização: para e avisa
+      erros++; feitos.add(l.id); continue; // pedido apagado na Tray: deixa como está
+    }
+    feitos.add(l.id);
+    const { pedidoEm, pagoEm } = o ? datasPedido(o) : {};
+    if (!pagoEm) continue;
+    const sets = {};
+    if (l.won_at !== pagoEm) sets.won_at = pagoEm;
+    if (l.stage === "ganho" && l.won_at !== pagoEm) sets.stage_changed_at = pagoEm;
+    if (l.canal_entrada === "tray" && pedidoEm && l.created_at > pedidoEm) sets.created_at = pedidoEm;
+    if (!Object.keys(sets).length) continue;
+    const keys = Object.keys(sets);
+    await env.DB.prepare(`UPDATE leads SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...keys.map((k) => sets[k]), l.id).run();
+    corrigidos++;
+  }
+  await setSettings(env, { tray_datas_corrigidas: JSON.stringify([...feitos]) });
+  return { corrigidos, erros, restantes: results.filter((l) => !feitos.has(l.id)).length, total: results.length };
 }

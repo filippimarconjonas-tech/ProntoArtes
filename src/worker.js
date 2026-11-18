@@ -15,7 +15,7 @@ import {
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
-import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
+import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias, corrigirDatasTray } from "./tray.js";
 import { avisosStatus, saveAvisos, enviarAviso, verificarAguardando } from "./avisos.js";
 import { sendToLead, sendMediaToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
@@ -486,6 +486,10 @@ async function handleAdminApi(request, env, url) {
   }
   if (path === "/tray/evidencias" && method === "POST") {
     try { return json(await coletarEvidencias(env)); }
+    catch (err) { return json({ ok: false, error: err.code || "erro_tray", message: err.message }, 400); }
+  }
+  if (path === "/tray/corrigir-datas" && method === "POST") {
+    try { return json({ ok: true, ...(await corrigirDatasTray(env)) }); }
     catch (err) { return json({ ok: false, error: err.code || "erro_tray", message: err.message }, 400); }
   }
   if (path === "/tray/sync" && method === "POST") {

@@ -991,6 +991,8 @@
           (st.webhook_url ? '<p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.webhook_url) + "</p>" : '<p class="empty">Gerada ao salvar as credenciais.</p>') +
           (st.callback_url ? '<p class="muted" style="font-size:12.5px;margin:12px 0 4px">URL de retorno (callback) — se o cadastro do aplicativo na Tray pedir:</p><p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.callback_url) + "</p>" : "") +
           '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o CRM também sincroniza sozinho a cada 30 minutos, e o botão de sincronizar continua disponível.</p>' +
+          '<p style="margin:12px 0 4px"><button class="btn btn--ghost btn--sm" id="tray-datas">Corrigir datas dos pedidos</button> <span class="form-msg" id="tray-datas-msg"></span></p>' +
+          '<p class="muted" style="font-size:12.5px;margin:0 0 8px">Ajusta a data de entrada e a data da venda dos clientes da Tray para a data real do pedido. Pode clicar mais de uma vez: só corrige o que falta.</p>' +
           '<p style="margin:12px 0 4px"><button class="btn btn--ghost btn--sm" id="tray-evid">Gerar evidências para homologação</button> <span class="form-msg" id="tray-evid-msg"></span></p>' +
           '<p class="muted" style="font-size:12px;margin:0">Chama uma vez cada rota usada pela integração e registra requisição e resposta (tokens e dados pessoais mascarados) para o documento de homologação da Tray.</p></div>' +
 
@@ -1006,6 +1008,18 @@
 
       $$("[data-open-lead]", view).forEach(function (a) {
         a.addEventListener("click", function (e) { e.preventDefault(); openLead(+a.getAttribute("data-open-lead")); });
+      });
+      $("#tray-datas").addEventListener("click", function () {
+        var b = this, m = $("#tray-datas-msg"), total = 0;
+        b.disabled = true; m.style.color = "var(--soft)"; m.textContent = "Lendo os pedidos na Tray…";
+        (function rodada() {
+          api("/tray/corrigir-datas", { method: "POST", body: {} }).then(function (r) {
+            total += r.corrigidos;
+            if (r.restantes > 0) { m.textContent = "Corrigidos " + total + "… faltam " + r.restantes; return rodada(); }
+            m.style.color = ""; m.textContent = "✅ Pronto: " + total + " cliente(s) com a data corrigida" + (r.erros ? " (" + r.erros + " pedido(s) não encontrados na Tray)" : "") + ".";
+            b.disabled = false; loadLeads();
+          }).catch(function (err) { m.style.color = ""; m.textContent = err.serverMessage || err.code; b.disabled = false; });
+        })();
       });
       $("#tray-evid").addEventListener("click", function () {
         var b = this, m = $("#tray-evid-msg");

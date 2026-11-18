@@ -92,7 +92,18 @@ async function registrarAviso(env, leadId, texto, r, logEvent) {
 
 /** A IA (respondendo sozinha) pediu um vendedor. */
 export async function avisarTransferencia(env, lead, motivo, logEvent) {
-  const texto = `${lead.nome || "Cliente"} pediu um vendedor${motivo ? " (" + motivo + ")" : ""}, WhatsApp ${telefone(lead.whatsapp)}`;
+  // Contexto para quem assume: de onde veio, o que quer e o que já comprou
+  const c = await env.DB.prepare("SELECT COUNT(*) AS n, SUM(valor) AS total, MAX(won_at) AS ultima FROM leads WHERE whatsapp = ? AND stage = 'ganho'")
+    .bind(lead.whatsapp).first().catch(() => null);
+  const partes = [`${lead.nome || "Cliente"} pediu um vendedor${motivo ? " (" + motivo + ")" : ""}`];
+  if (lead.cidade) partes.push(lead.cidade);
+  if (lead.produto || lead.interesse) partes.push("interesse: " + (lead.produto || lead.interesse));
+  partes.push(c?.n
+    ? `já comprou ${c.n}x${c.total ? " (R$ " + Math.round(c.total).toLocaleString("pt-BR") + ")" : ""}${c.ultima ? ", última em " + new Date(c.ultima).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : ""}`
+    : "ainda não comprou na loja");
+  partes.push("veio de: " + (lead.utm_campaign ? lead.origem + " / " + lead.utm_campaign : lead.origem || lead.canal_entrada || "WhatsApp"));
+  partes.push("WhatsApp " + telefone(lead.whatsapp));
+  const texto = partes.join(" · ");
   try {
     await registrarAviso(env, lead.id, texto, await enviarAviso(env, texto), logEvent);
   } catch (err) {

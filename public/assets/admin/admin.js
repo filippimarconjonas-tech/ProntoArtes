@@ -897,6 +897,43 @@
     }).catch(fail);
   }
 
+  /* Resumo do cliente no topo da ficha: de onde veio, o que quer, o que já comprou e o pedido de vendedor da IA */
+  function resumoCliente(l, r) {
+    var linhas = [];
+    var origem = l.origem || (l.canal_entrada === "tray" ? "Loja Tray" : l.canal_entrada === "whatsapp" ? "WhatsApp" : "Cadastro manual");
+    linhas.push(["Veio de", origem + (l.utm_campaign ? " · " + l.utm_campaign : "") + " · primeiro contato em " + fmtDate(r.primeiro_contato || l.created_at)]);
+    if (l.produto || l.interesse) linhas.push(["Interesse", l.produto || l.interesse]);
+    linhas.push(["Compras", r.vendas || r.pedidos
+      ? (r.vendas || r.pedidos) + " compra(s)" + (r.total ? " · " + brl(r.total) : "") + (r.desde ? " · cliente desde " + fmtDate(r.desde) : "") + (r.ultima && r.ultima !== r.desde ? " · última em " + fmtDate(r.ultima) : "")
+      : "Ainda não comprou na loja"]);
+    if (l.cidade) linhas.push(["Cidade", l.cidade]);
+    if (r.pedido_vendedor) linhas.push(["IA", r.pedido_vendedor.texto.replace(/^🙋\s*/, "") + " (" + fmtDate(r.pedido_vendedor.em, true) + ")"]);
+    return '<dl class="resumo-cli">' + linhas.map(function (x) { return "<dt>" + esc(x[0]) + "</dt><dd>" + esc(x[1]) + "</dd>"; }).join("") + "</dl>";
+  }
+
+  var COMPRAS_CACHE = {};
+  function carregarCompras(l) {
+    var box = $("#compras-sec");
+    var mostrar = function (lista) {
+      if (!box || !document.body.contains(box)) return;
+      var validas = lista.filter(function (c) { return !c.cancelado && !c.erro; });
+      var total = validas.reduce(function (a, c) { return a + (c.total || 0); }, 0);
+      box.innerHTML = "<h3>Compras na loja Tray</h3>" + (lista.length
+        ? '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' + validas.length + " compra(s)" + (total ? " · " + brl(total) + " no total" : "") + "</p>" +
+          '<div class="table-wrap"><table class="compras"><thead><tr><th>Data</th><th>Pedido</th><th>Itens</th><th>Total</th><th>Status</th></tr></thead><tbody>' +
+          lista.map(function (c) {
+            if (c.erro) return "<tr><td></td><td>" + esc(c.pedido) + '</td><td colspan="3" class="muted">Não foi possível ler na Tray</td></tr>';
+            return '<tr class="' + (c.cancelado ? "muted" : "") + '"><td class="nowrap">' + (c.data ? fmtDate(c.data) : "") + "</td><td>" + esc(c.pedido) + "</td><td>" +
+              esc((c.itens || []).map(function (i) { return (i.qtd > 1 ? i.qtd + "x " : "") + i.nome; }).join(", ") || "—") +
+              '</td><td class="nowrap">' + (c.total ? brl(c.total) : "") + "</td><td>" + esc(c.status || "") + "</td></tr>";
+          }).join("") + "</tbody></table></div>"
+        : '<p class="muted">Nenhum pedido encontrado na Tray.</p>');
+    };
+    if (COMPRAS_CACHE[l.id]) return mostrar(COMPRAS_CACHE[l.id]);
+    api("/leads/" + l.id + "/compras").then(function (d) { COMPRAS_CACHE[l.id] = d.compras; mostrar(d.compras); })
+      .catch(function (err) { if (box) box.innerHTML = '<h3>Compras na loja Tray</h3><p class="muted">' + esc(err.serverMessage || "Não foi possível ler os pedidos na Tray agora.") + "</p>"; });
+  }
+
   /* Sugestão da IA na ficha do lead */
   function aiSection(l) {
     var d = null;
@@ -991,6 +1028,8 @@
           (st.webhook_url ? '<p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.webhook_url) + "</p>" : '<p class="empty">Gerada ao salvar as credenciais.</p>') +
           (st.callback_url ? '<p class="muted" style="font-size:12.5px;margin:12px 0 4px">URL de retorno (callback) — se o cadastro do aplicativo na Tray pedir:</p><p style="word-break:break-all;font-size:13px;background:#faf7f3;padding:10px;border-radius:8px">' + esc(st.callback_url) + "</p>" : "") +
           '<p class="muted" style="font-size:12.5px">Cadastre esta URL no aplicativo da Tray como URL de notificação, com o escopo de <strong>pedidos</strong>. Assim cada pedido criado ou atualizado chega ao CRM na hora; o CRM também sincroniza sozinho a cada 30 minutos, e o botão de sincronizar continua disponível.</p>' +
+          '<p style="margin:12px 0 4px"><button class="btn btn--ghost btn--sm" id="tray-datas">Corrigir datas dos pedidos</button> <span class="form-msg" id="tray-datas-msg"></span></p>' +
+          '<p class="muted" style="font-size:12.5px;margin:0 0 8px">Ajusta a data de entrada e a data da venda dos clientes da Tray para a data real do pedido. Pode clicar mais de uma vez: só corrige o que falta.</p>' +
           '<p style="margin:12px 0 4px"><button class="btn btn--ghost btn--sm" id="tray-evid">Gerar evidências para homologação</button> <span class="form-msg" id="tray-evid-msg"></span></p>' +
           '<p class="muted" style="font-size:12px;margin:0">Chama uma vez cada rota usada pela integração e registra requisição e resposta (tokens e dados pessoais mascarados) para o documento de homologação da Tray.</p></div>' +
 
@@ -1006,6 +1045,18 @@
 
       $$("[data-open-lead]", view).forEach(function (a) {
         a.addEventListener("click", function (e) { e.preventDefault(); openLead(+a.getAttribute("data-open-lead")); });
+      });
+      $("#tray-datas").addEventListener("click", function () {
+        var b = this, m = $("#tray-datas-msg"), total = 0;
+        b.disabled = true; m.style.color = "var(--soft)"; m.textContent = "Lendo os pedidos na Tray…";
+        (function rodada() {
+          api("/tray/corrigir-datas", { method: "POST", body: {} }).then(function (r) {
+            total += r.corrigidos;
+            if (r.restantes > 0) { m.textContent = "Corrigidos " + total + "… faltam " + r.restantes; return rodada(); }
+            m.style.color = ""; m.textContent = "✅ Pronto: " + total + " cliente(s) com a data corrigida" + (r.erros ? " (" + r.erros + " pedido(s) não encontrados na Tray)" : "") + ".";
+            b.disabled = false; loadLeads();
+          }).catch(function (err) { m.style.color = ""; m.textContent = err.serverMessage || err.code; b.disabled = false; });
+        })();
       });
       $("#tray-evid").addEventListener("click", function () {
         var b = this, m = $("#tray-evid-msg");
@@ -1230,11 +1281,13 @@
         '<div class="d-head">' + avatar(l, "avatar--lg") + '<span class="fx fx-' + esc(l.faixa) + '">' + esc(l.faixa) + '</span><h2 id="drawer-title">' + esc(l.nome) + "</h2></div>" +
         '<p class="d-sub">' + esc(S.config.faixas[l.faixa] ? S.config.faixas[l.faixa].hint : "") + " · score " + l.score + " · " + esc(l.perfil || "") +
           "<br>" + esc(si.pipeline) + " › <strong>" + esc(si.stage) + "</strong> há " + ago(l.stage_changed_at || l.created_at) + "</p>" +
+        resumoCliente(l, d.resumo || {}) +
         '<div class="d-actions">' +
           '<a class="btn btn--wa" href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp ' + esc(phoneFmt(l.whatsapp)) + "</a>" +
           (l.email ? '<a class="btn btn--ghost" href="mailto:' + esc(l.email) + '">E-mail</a>' : "") +
           '<a class="btn btn--ghost" href="https://www.prontoartes.com.br" target="_blank" rel="noopener">Loja Tray</a>' +
         "</div>" +
+        ((d.resumo || {}).pedidos ? '<div class="d-sec" id="compras-sec"><h3>Compras na loja Tray</h3><p class="muted">Carregando os pedidos na Tray…</p></div>' : "") +
         aiSection(l) +
 
         '<form id="lead-edit">' +
@@ -1322,6 +1375,7 @@
       });
 
       bindWaSend(l);
+      if ((d.resumo || {}).pedidos) carregarCompras(l);
       bindAi(l);
 
       $("#contact-edit").addEventListener("submit", function (e) {

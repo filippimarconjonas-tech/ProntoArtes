@@ -15,7 +15,7 @@ import {
   tooManyAttempts, recordFailedAttempt
 } from "./auth.js";
 import { importTrayCsv, listProductsAdmin, listProductsPublic } from "./products.js";
-import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias } from "./tray.js";
+import { handleTrayWebhook, handleTrayCallback, trayStatus, saveTraySettings, syncTray, scheduledTraySync, syncProdutosTray, scheduledProdutosTray, coletarEvidencias, corrigirDatasTray, comprasDoLead } from "./tray.js";
 import { avisosStatus, saveAvisos, enviarAviso, verificarAguardando } from "./avisos.js";
 import { sendToLead, sendMediaToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
@@ -488,6 +488,17 @@ async function handleAdminApi(request, env, url) {
     try { return json(await coletarEvidencias(env)); }
     catch (err) { return json({ ok: false, error: err.code || "erro_tray", message: err.message }, 400); }
   }
+  const cm = path.match(/^\/leads\/(\d+)\/compras$/);
+  if (cm && method === "GET") {
+    const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(+cm[1]).first();
+    if (!lead) return json({ ok: false, error: "not_found" }, 404);
+    try { return json({ ok: true, compras: await comprasDoLead(env, lead) }); }
+    catch (err) { return json({ ok: false, error: err.code || "erro_tray", message: err.message }, 400); }
+  }
+  if (path === "/tray/corrigir-datas" && method === "POST") {
+    try { return json({ ok: true, ...(await corrigirDatasTray(env)) }); }
+    catch (err) { return json({ ok: false, error: err.code || "erro_tray", message: err.message }, 400); }
+  }
   if (path === "/tray/sync" && method === "POST") {
     const r = await syncTray(env, { upsertLead, logEvent });
     console.log("tray_sync", JSON.stringify(r.steps));
@@ -545,7 +556,15 @@ async function handleAdminApi(request, env, url) {
       const lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(id).first();
       if (!lead) return json({ ok: false, error: "not_found" }, 404);
       const { results: events } = await env.DB.prepare("SELECT * FROM lead_events WHERE lead_id = ? ORDER BY created_at DESC, id DESC").bind(id).all();
-      return json({ ok: true, lead, events });
+      // Resumo do cliente (todos os leads com o mesmo WhatsApp): compras, valor e desde quando
+      const resumo = await env.DB.prepare(
+        `SELECT (SELECT COUNT(*) FROM tray_orders t JOIN leads x ON x.id = t.lead_id WHERE x.whatsapp = ?1 AND t.lead_id > 0) AS pedidos,
+                COUNT(*) AS vendas, SUM(valor) AS total, MIN(won_at) AS desde, MAX(won_at) AS ultima,
+                (SELECT MIN(created_at) FROM leads WHERE whatsapp = ?1) AS primeiro_contato
+           FROM leads WHERE whatsapp = ?1 AND stage = 'ganho'`
+      ).bind(lead.whatsapp).first();
+      const pedido = events.find((e) => e.type === "ia" && /pediu um vendedor/.test(e.text || ""));
+      return json({ ok: true, lead, events, resumo: { ...resumo, pedido_vendedor: pedido ? { em: pedido.created_at, texto: pedido.text } : null } });
     }
     if (method === "PATCH") return updateLead(env, id, (await readJson(request)) || {}, user);
     if (method === "DELETE") {

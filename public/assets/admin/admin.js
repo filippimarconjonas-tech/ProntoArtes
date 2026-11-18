@@ -279,9 +279,22 @@
     return tags.join("");
   }
 
+  /* Avatar com as iniciais do cliente (a API do WhatsApp não fornece a foto de perfil) */
+  var AVATAR_CORES = ["#b33e2c", "#8a5a2b", "#5b3fb8", "#1f7a55", "#2f6fb3", "#a8527a", "#6b6b2a", "#c0722a"];
+  function iniciais(nome) {
+    var p = String(nome || "").normalize("NFC").split(/\s+/).map(function (w) { return (w.match(/\p{L}/u) || [""])[0]; }).filter(Boolean);
+    if (!p.length) return "?";
+    return (p[0] + (p.length > 1 ? p[p.length - 1] : "")).toUpperCase();
+  }
+  function avatar(l, cls) {
+    var n = String(l.nome || ""), h = 0;
+    for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+    return '<span class="avatar' + (cls ? " " + cls : "") + '" style="background:' + AVATAR_CORES[h % AVATAR_CORES.length] + '" aria-hidden="true">' + esc(iniciais(n)) + "</span>";
+  }
+
   function cardHtml(l) {
     return '<article class="card f-' + esc(l.faixa) + '" draggable="true" data-id="' + l.id + '">' +
-      '<div class="card__top"><span class="card__name">' + esc(l.nome) + '</span><span class="fx fx-' + esc(l.faixa) + '" title="Score ' + l.score + '">' + esc(l.faixa) + "</span></div>" +
+      '<div class="card__top"><span class="card__who">' + avatar(l) + '<span class="card__name">' + esc(l.nome) + '</span></span><span class="fx fx-' + esc(l.faixa) + '" title="Score ' + l.score + '">' + esc(l.faixa) + "</span></div>" +
       '<div class="card__meta">' + esc(l.produto || l.interesse || "Interesse não informado") + "</div>" +
       '<div class="card__meta">' + esc(l.cidade || "") + (l.cidade ? " · " : "") + esc(l.prazo || "prazo n/i") + "</div>" +
       (ultimaMsg(l) ? '<div class="card__meta card__last">Última mensagem: ' + esc(ultimaMsg(l)) + "</div>" : "") +
@@ -1124,7 +1137,7 @@
       "</tr></thead><tbody>" + (list.map(function (l) {
         var si = stageInfo(l.pipeline, l.stage);
         return '<tr data-id="' + l.id + '"><td class="nowrap">' + esc(ultimaMsg(l) || "—") + "</td><td>" + fmtDate(l.created_at, true) + '</td><td><span class="fx fx-' + esc(l.faixa) + '">' + esc(l.faixa) + "</span> " + l.score +
-          "</td><td>" + esc(l.nome) + "</td><td>" + esc(phoneFmt(l.whatsapp)) + "</td><td>" + esc(l.cidade || "") +
+          '</td><td><span class="who">' + avatar(l, "avatar--sm") + esc(l.nome) + "</span></td><td>" + esc(phoneFmt(l.whatsapp)) + "</td><td>" + esc(l.cidade || "") +
           '</td><td class="trunc">' + esc(l.produto || l.interesse || "") + "</td><td>" + esc(l.prazo || "") +
           "</td><td>" + esc(si.stage) + (l.stage === "ganho" && l.post_stage ? " · " + esc(postLabel(l.post_stage)) : "") +
           "</td><td>" + (l.valor ? brl(l.valor) : "") + '</td><td class="trunc">' + esc(l.utm_source || l.origem || "") + "</td></tr>";
@@ -1214,7 +1227,7 @@
       var wa = "https://wa.me/" + encodeURIComponent(l.whatsapp) + "?text=" + encodeURIComponent(msg);
 
       body.innerHTML =
-        '<div class="d-head"><span class="fx fx-' + esc(l.faixa) + '">' + esc(l.faixa) + '</span><h2 id="drawer-title">' + esc(l.nome) + "</h2></div>" +
+        '<div class="d-head">' + avatar(l, "avatar--lg") + '<span class="fx fx-' + esc(l.faixa) + '">' + esc(l.faixa) + '</span><h2 id="drawer-title">' + esc(l.nome) + "</h2></div>" +
         '<p class="d-sub">' + esc(S.config.faixas[l.faixa] ? S.config.faixas[l.faixa].hint : "") + " · score " + l.score + " · " + esc(l.perfil || "") +
           "<br>" + esc(si.pipeline) + " › <strong>" + esc(si.stage) + "</strong> há " + ago(l.stage_changed_at || l.created_at) + "</p>" +
         '<div class="d-actions">' +

@@ -160,6 +160,10 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .card.dragging { opacity: .5; }
 .card__top { display: flex; justify-content: space-between; gap: 6px; align-items: start; }
 .card__name { font-weight: 700; font-size: 13.5px; }
+.card__who, .who { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.avatar { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .3px; }
+.avatar--sm { width: 24px; height: 24px; font-size: 10.5px; }
+.avatar--lg { width: 42px; height: 42px; font-size: 16px; }
 .card__meta { font-size: 12px; color: var(--soft); margin-top: 3px; }
 .card__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .tag { font-size: 11px; background: #f3eee8; border-radius: 5px; padding: 2px 6px; color: var(--soft); }

@@ -135,6 +135,19 @@ function datasPedido(o) {
 }
 const diaBR = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
+// Itens do pedido: o "pedido completo" traz ProductsSold (o formato varia um pouco entre lojas)
+function itensPedido(full) {
+  const o = full?.Order || {};
+  const lista = o.ProductsSold || full?.ProductsSold || o.products_sold || [];
+  return (Array.isArray(lista) ? lista : [])
+    .map((x) => x?.ProductsSold || x?.ProductSold || x)
+    .filter(Boolean)
+    .map((p) => ({ nome: String(p.name || p.product_name || "").trim(), qtd: Number(p.quantity) || 1, preco: Number(p.price) || null }))
+    .filter((p) => p.nome);
+}
+const resumoItens = (itens) => itens.map((i) => (i.qtd > 1 ? `${i.qtd}x ` : "") + i.nome).join(", ").slice(0, 300);
+const reais = (v) => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const POST_ORDER = ["pago", "separacao", "enviado", "entregue", "recompra"];
 const POST_LABEL = { pago: "Pedido pago", separacao: "Separação / produção", enviado: "Enviado", entregue: "Entregue" };
 
@@ -195,6 +208,8 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
   const agora = now();
   // Pedido de mais de 2 dias atrás: o histórico diz de quando ele é
   const doDia = pedidoEm && Date.now() - Date.parse(pedidoEm) > 2 * 86400000 ? ` de ${diaBR(pedidoEm)}` : "";
+  const itens = itensPedido(full);
+  const comItens = itens.length ? ` · ${resumoItens(itens)}` : "";
   if (lead && map.status === status) return { pedido, status, lead_id: lead.id, acao: "sem mudanças" };
 
   if (!lead) {
@@ -220,7 +235,7 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
           `INSERT INTO tray_orders (pedido, lead_id, status) VALUES (?, ?, ?)
            ON CONFLICT(pedido) DO UPDATE SET lead_id = excluded.lead_id, status = excluded.status, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`
         ).bind(pedido, lead.id, status).run();
-        const txt = `Pedido anterior na Tray: nº ${pedido}${pedidoEm ? " de " + diaBR(pedidoEm) : ""} (${status})${total ? " · R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : ""}.`;
+        const txt = `Pedido anterior na Tray: nº ${pedido}${pedidoEm ? " de " + diaBR(pedidoEm) : ""} (${status})${comItens}${total ? " · " + reais(total) : ""}.`;
         await deps.logEvent(env, lead.id, "tray", txt, "Tray");
         return { pedido, status, lead_id: lead.id, acao: txt };
       }
@@ -252,8 +267,10 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
 
   const sets = {};
   const events = [];
-  if (!map || map.lead_id !== lead.id) events.push(`Pedido Tray nº ${pedido}${doDia} vinculado (${status}).`);
+  if (!map || map.lead_id !== lead.id) events.push(`Pedido Tray nº ${pedido}${doDia} vinculado (${status})${comItens}.`);
   if (cls.kind !== "cancelado" && lead.pedido_tray !== pedido) sets.pedido_tray = pedido;
+  // O que o cliente comprou aparece no cartão e na lista (só preenche se ninguém escreveu o produto)
+  if (cls.kind !== "cancelado" && itens.length && !lead.produto) sets.produto = resumoItens(itens);
   if (total && cls.kind !== "cancelado" && lead.valor !== total) sets.valor = total;
 
   if (cls.kind === "aguardando" && !["pagamento", "ganho"].includes(lead.stage)) {
@@ -681,26 +698,29 @@ export async function coletarEvidencias(env) {
  * até o limite de chamadas por execução; o painel chama de novo até não restar nenhum.
  */
 export async function corrigirDatasTray(env) {
-  const s = await getSettings(env, ["tray_datas_corrigidas"]);
-  const feitos = new Set(JSON.parse(s.tray_datas_corrigidas || "[]"));
+  const s = await getSettings(env, ["tray_datas_corrigidas_v2"]);
+  const feitos = new Set(JSON.parse(s.tray_datas_corrigidas_v2 || "[]"));
   const { results } = await env.DB.prepare(
-    "SELECT id, pedido_tray, created_at, won_at, stage, canal_entrada FROM leads WHERE canal_fechamento = 'site_tray' AND pedido_tray IS NOT NULL ORDER BY id"
+    "SELECT id, pedido_tray, created_at, won_at, stage, canal_entrada, produto FROM leads WHERE canal_fechamento = 'site_tray' AND pedido_tray IS NOT NULL ORDER BY id"
   ).all();
   const fila = results.filter((l) => !feitos.has(l.id));
   const orcamento = { resta: LIMITE_CHAMADAS - 4 };
   let corrigidos = 0, erros = 0;
   for (const l of fila) {
-    let o;
-    try { o = (await api(env, `/orders/${encodeURIComponent(l.pedido_tray)}`, orcamento))?.Order; }
+    let full;
+    try { full = await pedidoCompleto(env, l.pedido_tray, orcamento); }
     catch (err) {
       if (err instanceof SemOrcamento) break;
       if (!(err instanceof TrayError) || err.status !== 404) throw err; // Tray fora do ar ou sem autorização: para e avisa
       erros++; feitos.add(l.id); continue; // pedido apagado na Tray: deixa como está
     }
     feitos.add(l.id);
+    const o = full?.Order;
     const { pedidoEm, pagoEm } = o ? datasPedido(o) : {};
     if (!pagoEm) continue;
     const sets = {};
+    const itens = itensPedido(full);
+    if (itens.length && !l.produto) sets.produto = resumoItens(itens);
     if (l.won_at !== pagoEm) sets.won_at = pagoEm;
     if (l.stage === "ganho" && l.won_at !== pagoEm) sets.stage_changed_at = pagoEm;
     if (l.canal_entrada === "tray" && pedidoEm && l.created_at > pedidoEm) sets.created_at = pedidoEm;
@@ -709,6 +729,52 @@ export async function corrigirDatasTray(env) {
     await env.DB.prepare(`UPDATE leads SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).bind(...keys.map((k) => sets[k]), l.id).run();
     corrigidos++;
   }
-  await setSettings(env, { tray_datas_corrigidas: JSON.stringify([...feitos]) });
+  await setSettings(env, { tray_datas_corrigidas_v2: JSON.stringify([...feitos]) });
   return { corrigidos, erros, restantes: results.filter((l) => !feitos.has(l.id)).length, total: results.length };
+}
+
+/** Pedido completo (com itens e cliente); loja sem essa consulta usa o pedido simples. */
+async function pedidoCompleto(env, pedido, orcamento) {
+  const id = encodeURIComponent(pedido);
+  if (!orcamento.semCompleto) {
+    try {
+      const full = await api(env, `/orders/${id}/complete`, orcamento);
+      if (full?.Order) return full;
+    } catch (err) {
+      if (!(err instanceof TrayError) || err.status !== 404) throw err;
+      orcamento.semCompleto = true;
+    }
+  }
+  return api(env, `/orders/${id}`, orcamento);
+}
+
+/**
+ * Compras do cliente na loja (todos os leads com o mesmo WhatsApp), lidas na Tray na hora:
+ * data, nº, itens, total e status de até 10 pedidos, do mais novo para o mais antigo.
+ */
+export async function comprasDoLead(env, lead) {
+  const { results } = await env.DB.prepare(
+    `SELECT t.pedido, t.status FROM tray_orders t JOIN leads l ON l.id = t.lead_id
+      WHERE l.whatsapp = ? AND t.lead_id > 0 ORDER BY CAST(t.pedido AS INTEGER) DESC LIMIT 10`
+  ).bind(lead.whatsapp).all();
+  const orcamento = { resta: LIMITE_CHAMADAS - 4 };
+  const compras = [];
+  for (const r of results) {
+    let full;
+    try { full = await pedidoCompleto(env, r.pedido, orcamento); }
+    catch (err) {
+      if (err instanceof SemOrcamento) break;
+      compras.push({ pedido: r.pedido, status: r.status, erro: err.message });
+      continue;
+    }
+    const o = full?.Order;
+    if (!o) continue;
+    compras.push({
+      pedido: String(o.id || r.pedido), status: o.status || r.status, data: datasPedido(o).pedidoEm,
+      total: Number(o.total) || null, itens: itensPedido(full), cancelado: classify(o.status).kind === "cancelado"
+    });
+  }
+  const valida = compras.find((c) => !c.cancelado && c.itens?.length);
+  if (valida && !lead.produto) await env.DB.prepare("UPDATE leads SET produto = ? WHERE id = ? AND (produto IS NULL OR produto = '')").bind(resumoItens(valida.itens), lead.id).run();
+  return compras;
 }

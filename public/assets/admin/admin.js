@@ -125,6 +125,9 @@
     });
   }
 
+  // Etapas sem atendimento pendente (igual a STAGES_FECHADAS em src/crm.js)
+  var FECHADAS = ["ganho", "perdido", "sem_interesse", "cliente_antigo"];
+
   function loadLeads() {
     return api("/leads").then(function (d) {
       S.leads = d.leads;
@@ -133,17 +136,18 @@
   }
 
   function updateCounts() {
-    var open = function (l) { return ["ganho", "perdido", "sem_interesse"].indexOf(l.stage) < 0; };
+    var open = function (l) { return FECHADAS.indexOf(l.stage) < 0; };
     var c = {
       vendas: S.leads.filter(function (l) { return l.pipeline === "vendas" && open(l); }).length,
       nutricao: S.leads.filter(function (l) { return l.pipeline === "nutricao" && open(l); }).length,
-      posvenda: S.leads.filter(function (l) { return l.stage === "ganho" && l.post_stage && l.post_stage !== "recompra"; }).length
+      posvenda: S.leads.filter(function (l) { return l.stage === "ganho" && l.post_stage && l.post_stage !== "recompra"; }).length,
+      clientes: S.leads.filter(function (l) { return l.pipeline === "clientes"; }).length
     };
     Object.keys(c).forEach(function (k) { var el = $('[data-count="' + k + '"]'); if (el) el.textContent = c[k] || ""; });
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos", ia: "Atendimento com IA" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", clientes: "Clientes antigos", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos", ia: "Atendimento com IA" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1).split("?")[0];
@@ -157,7 +161,7 @@
   function render() {
     var v = S.view;
     if (v === "dashboard") return renderDashboard();
-    if (v === "vendas" || v === "nutricao") return renderBoard(v);
+    if (v === "vendas" || v === "nutricao" || v === "clientes") return renderBoard(v);
     if (v === "posvenda") return renderPostSale();
     if (v === "whatsapp") return renderWhatsApp();
     if (v === "modelos") return renderTemplates();
@@ -260,12 +264,12 @@
       var mins = (Date.now() - new Date(l.created_at).getTime()) / 60000;
       tags.push('<span class="tag' + (mins > 15 ? " tag--late" : "") + '">Sem contato · ' + ago(l.created_at) + "</span>");
     }
-    if (l.next_followup_at && ["ganho", "perdido", "sem_interesse"].indexOf(l.stage) < 0) {
+    if (l.next_followup_at && FECHADAS.indexOf(l.stage) < 0) {
       var due = l.next_followup_at <= nowIso;
       var today = new Date(l.next_followup_at).toDateString() === new Date().toDateString();
       tags.push('<span class="tag' + (due ? " tag--late" : today ? " tag--due" : "") + '">Follow-up ' + fmtDate(l.next_followup_at, true) + "</span>");
     }
-    if (l.last_inbound_at && (!l.last_outbound_at || l.last_inbound_at > l.last_outbound_at) && ["ganho", "perdido", "sem_interesse"].indexOf(l.stage) < 0) {
+    if (l.last_inbound_at && (!l.last_outbound_at || l.last_inbound_at > l.last_outbound_at) && FECHADAS.indexOf(l.stage) < 0) {
       tags.push('<span class="tag tag--late">Cliente aguardando · ' + ago(l.last_inbound_at) + "</span>");
     }
     if (l.valor) tags.push('<span class="tag tag--val">' + brl(l.valor) + "</span>");

@@ -122,7 +122,8 @@ async function handleInbound(env, m, contact, deps) {
   } else {
     leadId = lead.id;
     let move = null;
-    if (lead.stage === "perdido") move = { pipeline: "vendas", stage: "novo" };
+    // Perdido ou cliente antigo que volta a falar vira oportunidade no funil de vendas
+    if (lead.stage === "perdido" || lead.pipeline === "clientes") move = { pipeline: "vendas", stage: "novo" };
     else if (lead.pipeline === "nutricao" && ["pesquisando", "conteudo", "sem_interesse"].includes(lead.stage)) move = { pipeline: "nutricao", stage: "reaquecido" };
 
     if (move) {

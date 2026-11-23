@@ -124,7 +124,7 @@ export async function verificarAguardando(env, logEvent) {
     `SELECT id, nome, whatsapp, last_inbound_at FROM leads
       WHERE last_inbound_at IS NOT NULL AND (last_outbound_at IS NULL OR last_outbound_at < last_inbound_at)
         AND last_inbound_at <= ? AND last_inbound_at >= ?
-        AND stage NOT IN ('ganho', 'perdido', 'sem_interesse')
+        AND stage NOT IN ('ganho', 'perdido', 'sem_interesse', 'cliente_antigo')
         AND NOT EXISTS (SELECT 1 FROM lead_events e WHERE e.lead_id = leads.id AND e.type = 'aviso' AND e.created_at >= leads.last_inbound_at)
       ORDER BY last_inbound_at LIMIT 8`
   ).bind(new Date(agora - minutos * 60000).toISOString(), new Date(agora - JANELA_AGUARDANDO_H * 3600000).toISOString()).all();

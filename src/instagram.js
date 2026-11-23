@@ -391,3 +391,54 @@ export function paraIa(conv) {
     em: m.created_at
   }));
 }
+
+/**
+ * Foto de perfil de quem mandou direct (a Meta só libera para quem já falou com a conta; quem só comentou fica com a letra).
+ * O link da foto do Instagram expira: o CRM busca de novo e guarda a imagem no cache da Cloudflare por 1 dia
+ * (a ausência de foto fica 6h no cache, para não consultar a API a cada atualização da tela).
+ */
+export function fotoPerfil(env, igId) {
+  return imagemCache(env, "perfil/" + igId, async () =>
+    (await api(env, "/" + encodeURIComponent(igId), { params: { fields: "profile_pic" } }))?.profile_pic);
+}
+
+/**
+ * Miniatura do post comentado (imagem do post, ou a capa se for vídeo/reels). Só de posts que já
+ * apareceram em comentários no CRM. O link da Meta expira: mesmo cache de 1 dia da foto de perfil.
+ */
+export async function fotoPost(env, mediaId) {
+  const conhecido = await env.DB.prepare("SELECT 1 FROM ig_messages WHERE media_id = ? LIMIT 1").bind(mediaId).first();
+  if (!conhecido) return new Response(null, { status: 404 });
+  return imagemCache(env, "post/" + mediaId, async () => {
+    const m = await api(env, "/" + encodeURIComponent(mediaId), { params: { fields: "media_type,media_url,thumbnail_url" } });
+    return m?.thumbnail_url || (m?.media_type !== "VIDEO" ? m?.media_url : null);
+  });
+}
+
+async function imagemCache(env, chave, linkDaImagem) {
+  const cache = typeof caches !== "undefined" ? caches.default : null;
+  const key = new Request("https://ig-foto.cache/" + chave);
+  const semFoto = () => new Response(null, { status: 404, headers: { "cache-control": "private, max-age=21600" } });
+  const comFoto = (buf, tipo) => new Response(buf, { headers: { "content-type": tipo, "cache-control": "private, max-age=86400" } });
+  if (cache) {
+    const hit = await cache.match(key);
+    if (hit) return hit.headers.get("x-sem-foto") ? semFoto() : comFoto(await hit.arrayBuffer(), hit.headers.get("content-type") || "image/jpeg");
+  }
+  let buf = null, tipo = "image/jpeg";
+  try {
+    const link = await linkDaImagem();
+    if (link) {
+      const img = await fetch(link);
+      tipo = img.headers.get("content-type") || tipo;
+      if (img.ok && tipo.startsWith("image/")) buf = await img.arrayBuffer();
+    }
+  } catch (err) {
+    if (err?.code === "instagram_desconectado") return semFoto(); // sem guardar: volta a funcionar ao reconectar
+  }
+  if (cache) {
+    await cache.put(key, buf
+      ? new Response(buf, { headers: { "content-type": tipo, "cache-control": "public, max-age=86400" } })
+      : new Response("", { headers: { "x-sem-foto": "1", "cache-control": "public, max-age=21600" } }));
+  }
+  return buf ? comFoto(buf, tipo) : semFoto();
+}

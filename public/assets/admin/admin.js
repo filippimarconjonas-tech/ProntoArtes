@@ -382,6 +382,18 @@
   };
   var IG_MODOS = { dm: "Direct", publico: "Resposta pública no post", privado: "Direct a partir do comentário" };
 
+  // Foto de perfil do Instagram por cima da letra; sem foto (ou erro), a letra continua aparecendo
+  function igAvatar(c, cls) {
+    var a = avatar({ nome: c.username || c.name || "?" }, cls);
+    return a.replace(/<\/span>$/, '<img class="avatar__foto" src="/api/admin/instagram/foto/' + encodeURIComponent(c.ig_id) + '" alt="" loading="lazy"></span>');
+  }
+  function igFotos(root) {
+    $$("img.avatar__foto", root).forEach(function (img) {
+      var esconde = function () { img.hidden = true; };
+      if (img.complete && !img.naturalWidth) esconde(); else img.addEventListener("error", esconde);
+    });
+  }
+
   function igNome(c) { return c.username ? "@" + c.username : (c.name || "Instagram " + String(c.ig_id).slice(-4)); }
 
   function renderInstagram() {
@@ -433,12 +445,13 @@
       box.innerHTML = l.length ? l.map(function (c) {
         var espera = c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at > c.last_outbound_at);
         return '<button type="button" class="ig__item' + (IG.sel === c.ig_id ? " is-on" : "") + '" data-ig="' + esc(c.ig_id) + '">' +
-          avatar({ nome: c.username || c.name || "?" }) +
+          igAvatar(c) +
           '<span class="ig__item-txt"><strong>' + esc(igNome(c)) + "</strong>" +
           '<small>' + (c.last_kind === "comentario" ? "💬 " : "✉️ ") + esc(c.last_text || "") + "</small></span>" +
           '<span class="ig__item-meta"><time>' + (c.last_at ? esc(ago(c.last_at)) : "") + "</time>" +
           (c.unread ? '<b class="count">' + c.unread + "</b>" : espera ? '<span class="tag tag--warn">responder</span>' : "") + "</span></button>";
       }).join("") : '<p class="empty" style="padding:12px">' + (IG.lista.length ? "Nada neste filtro." : "Nenhuma mensagem ainda. Quando alguém mandar direct ou comentar num post, aparece aqui.") + "</p>";
+      igFotos(box);
       $$("[data-ig]", box).forEach(function (b) { b.addEventListener("click", function () { igOpen(b.getAttribute("data-ig")); }); });
     });
   }
@@ -499,7 +512,7 @@
       ? "Fora da janela de 24h do direct: o Instagram só deixa responder no direct até 24h depois da última mensagem da pessoa. Responda um comentário no post ou aguarde ela escrever."
       : "";
     th.innerHTML =
-      '<header class="ig__head">' + avatar({ nome: c.username || c.name || "?" }) +
+      '<header class="ig__head">' + igAvatar(c, "avatar--lg") +
         '<div><strong>' + esc(igNome(c)) + "</strong>" + (c.name && c.username ? '<small class="muted"> · ' + esc(c.name) + "</small>" : "") +
         (c.username ? '<br><a class="muted" href="https://www.instagram.com/' + esc(c.username) + '/" target="_blank" rel="noopener">abrir perfil</a>' : "") + "</div>" +
         '<button type="button" class="btn btn--ghost btn--sm ig__voltar" id="ig-voltar">← Conversas</button></header>' +
@@ -517,6 +530,7 @@
           '<button class="btn btn--primary" id="ig-send"' + (aviso ? " disabled" : "") + ">Enviar no Instagram</button></div>" +
       "</form>";
     $(".ig").classList.add("is-open");
+    igFotos(th);
     var ta = $("#ig-text"), chat = $("#ig-chat");
     if (texto) ta.value = texto;
     chat.scrollTop = chat.scrollHeight;

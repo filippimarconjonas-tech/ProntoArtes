@@ -21,7 +21,7 @@ import { sendToLead, sendMediaToLead, listTemplates, createTemplate, deleteTempl
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
 import {
   handleInstagramWebhook, handleInstagramCallback, instagramStatus, saveInstagramSettings, authUrl as instagramAuthUrl,
-  disconnectInstagram, refreshInstagramToken, listConversas, getConversa, responder as responderInstagram, paraIa
+  disconnectInstagram, refreshInstagramToken, listConversas, getConversa, responder as responderInstagram, paraIa, fotoPerfil
 } from "./instagram.js";
 import {
   aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
@@ -394,6 +394,8 @@ async function handleAdminApi(request, env, url) {
       if (path === "/instagram/conectar" && method === "POST") return json({ ok: true, url: await instagramAuthUrl(env, url.origin) });
       if (path === "/instagram/desconectar" && method === "POST") { await disconnectInstagram(env); return json({ ok: true }); }
       if (path === "/instagram/conversas" && method === "GET") return json({ ok: true, conversas: await listConversas(env) });
+      const fm = path.match(/^\/instagram\/foto\/(\d+)$/);
+      if (fm && method === "GET") return fotoPerfil(env, fm[1]);
       const cm = path.match(/^\/instagram\/conversas\/(\d+)(\/responder|\/sugestao)?$/);
       if (cm && !cm[2] && method === "GET") {
         const conv = await getConversa(env, cm[1]);

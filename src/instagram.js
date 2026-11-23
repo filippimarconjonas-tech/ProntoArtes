@@ -391,3 +391,36 @@ export function paraIa(conv) {
     em: m.created_at
   }));
 }
+
+/**
+ * Foto de perfil de quem mandou direct (a Meta só libera para quem já falou com a conta; quem só comentou fica com a letra).
+ * O link da foto do Instagram expira: o CRM busca de novo e guarda a imagem no cache da Cloudflare por 1 dia
+ * (a ausência de foto fica 6h no cache, para não consultar a API a cada atualização da tela).
+ */
+export async function fotoPerfil(env, igId) {
+  const cache = typeof caches !== "undefined" ? caches.default : null;
+  const key = new Request("https://ig-foto.cache/" + encodeURIComponent(igId));
+  const semFoto = () => new Response(null, { status: 404, headers: { "cache-control": "private, max-age=21600" } });
+  const comFoto = (buf, tipo) => new Response(buf, { headers: { "content-type": tipo, "cache-control": "private, max-age=86400" } });
+  if (cache) {
+    const hit = await cache.match(key);
+    if (hit) return hit.headers.get("x-sem-foto") ? semFoto() : comFoto(await hit.arrayBuffer(), hit.headers.get("content-type") || "image/jpeg");
+  }
+  let buf = null, tipo = "image/jpeg";
+  try {
+    const p = await api(env, "/" + encodeURIComponent(igId), { params: { fields: "profile_pic" } });
+    if (p?.profile_pic) {
+      const img = await fetch(p.profile_pic);
+      tipo = img.headers.get("content-type") || tipo;
+      if (img.ok && tipo.startsWith("image/")) buf = await img.arrayBuffer();
+    }
+  } catch (err) {
+    if (err?.code === "instagram_desconectado") return semFoto(); // sem guardar: volta a funcionar ao reconectar
+  }
+  if (cache) {
+    await cache.put(key, buf
+      ? new Response(buf, { headers: { "content-type": tipo, "cache-control": "public, max-age=86400" } })
+      : new Response("", { headers: { "x-sem-foto": "1", "cache-control": "public, max-age=21600" } }));
+  }
+  return buf ? comFoto(buf, tipo) : semFoto();
+}

@@ -497,11 +497,24 @@
       acoes = '<span class="ig__acoes"><button type="button" class="btn btn--ghost btn--sm" data-resp="publico" data-c="' + esc(m.id) + '">Responder no post</button>' +
         (m.pode_privada ? '<button type="button" class="btn btn--ghost btn--sm" data-resp="privado" data-c="' + esc(m.id) + '">Responder no direct</button>' : "") + "</span>";
     }
-    return '<div class="chat__msg chat__msg--' + (out ? "out" : "in") + (IG.comment === m.id && IG.modo !== "dm" ? " is-sel" : "") + '">' +
-      (tipo ? '<small class="chat__note" style="margin:0 0 4px">' + tipo +
+    // Miniatura do post comentado (clicar abre o post no Instagram)
+    var thumb = m.kind === "comentario" && !out && m.media_id
+      ? '<a class="ig__post" href="' + esc(m.media_link || "#") + '" target="_blank" rel="noopener" title="Abrir o post no Instagram">' +
+        '<img src="/api/admin/instagram/post/' + encodeURIComponent(m.media_id) + '" alt="Post comentado" loading="lazy"><span>post</span></a>'
+      : "";
+    var corpo = (tipo ? '<small class="chat__note" style="margin:0 0 4px">' + tipo +
         (m.media_link ? ' · <a href="' + esc(m.media_link) + '" target="_blank" rel="noopener">ver post</a>' : "") + "</small>" : "") +
       esc(m.text || "[" + (m.attachment || "mensagem") + "]") +
-      '<small class="chat__note">' + esc(fmtDate(m.created_at, true)) + (m.user ? " · " + esc(m.user) : "") + "</small>" + acoes + "</div>";
+      '<small class="chat__note">' + esc(fmtDate(m.created_at, true)) + (m.user ? " · " + esc(m.user) : "") + "</small>" + acoes;
+    return '<div class="chat__msg chat__msg--' + (out ? "out" : "in") + (thumb ? " ig__comentario" : "") + (IG.comment === m.id && IG.modo !== "dm" ? " is-sel" : "") + '">' +
+      (thumb ? thumb + "<div>" + corpo + "</div>" : corpo) + "</div>";
+  }
+  // Post sem imagem disponível: fica só o quadrinho com "post"
+  function igPosts(root) {
+    $$(".ig__post img", root).forEach(function (img) {
+      var esconde = function () { img.hidden = true; };
+      if (img.complete && !img.naturalWidth) esconde(); else img.addEventListener("error", esconde);
+    });
   }
 
   function igRenderThread(texto) {
@@ -531,6 +544,7 @@
       "</form>";
     $(".ig").classList.add("is-open");
     igFotos(th);
+    igPosts(th);
     var ta = $("#ig-text"), chat = $("#ig-chat");
     if (texto) ta.value = texto;
     chat.scrollTop = chat.scrollHeight;

@@ -544,7 +544,12 @@
   var TPL_SUGESTOES = [
     { name: "followup_orcamento", category: "MARKETING", body: "Olá, {{1}}! Aqui é da Pronto Artes. Conseguiu avaliar o orçamento do {{2}} que enviamos? Se quiser, ajustamos frete e forma de pagamento para você.", examples: ["Ana", "Chafariz 3 Quedas"], footer: "Pronto Artes · Arte que decora" },
     { name: "boas_vindas_lead", category: "MARKETING", body: "Olá, {{1}}! Recebemos seu contato pelo site da Pronto Artes. Para te ajudar com o orçamento, pode me dizer as medidas do espaço e a cidade de entrega?", examples: ["Ana"], footer: "Pronto Artes · Arte que decora" },
-    { name: "pedido_enviado", category: "UTILITY", body: "Olá, {{1}}! Seu pedido {{2}} da Pronto Artes foi enviado. Código de rastreio: {{3}}.", examples: ["Ana", "12345", "BR123456789"], footer: "" }
+    { name: "pedido_enviado", category: "UTILITY", body: "Olá, {{1}}! Seu pedido {{2}} da Pronto Artes foi enviado. Código de rastreio: {{3}}.", examples: ["Ana", "12345", "BR123456789"], footer: "" },
+    // Utilidade: retomam um atendimento ou pedido que o cliente já iniciou (sem oferta, senão a Meta reclassifica como marketing)
+    { name: "retomar_atendimento", category: "UTILITY", body: "Olá, {{1}}! Aqui é da Pronto Artes, sobre o seu atendimento de {{2}}. Para darmos continuidade ao seu orçamento, responda esta mensagem e seguimos por aqui.", examples: ["Roberto", "chafariz de parede"], footer: "Pronto Artes · Três Rios/RJ" },
+    { name: "orcamento_pronto", category: "UTILITY", body: "Olá, {{1}}! O orçamento que você solicitou para {{2}} está pronto, com valores, medidas e frete para {{3}}. Responda esta mensagem para recebê-lo.", examples: ["Roberto", "poste colonial", "Agudos/SP"], footer: "Pronto Artes · Três Rios/RJ" },
+    { name: "pagamento_pendente", category: "UTILITY", body: "Olá, {{1}}! O pedido nº {{2}} na loja Pronto Artes está aguardando a confirmação do pagamento. Se precisar do link de pagamento ou da chave PIX, responda esta mensagem.", examples: ["Roberto", "1731"], footer: "Pronto Artes · Três Rios/RJ" },
+    { name: "confirmar_entrega", category: "UTILITY", body: "Olá, {{1}}! O pedido nº {{2}} da Pronto Artes consta como entregue. A peça chegou em perfeito estado? Se houver qualquer avaria, responda com fotos que resolvemos.", examples: ["Roberto", "845"], footer: "Pronto Artes · Três Rios/RJ" }
   ];
   var STATUS_TPL = { APPROVED: "✅ Aprovado", PENDING: "⏳ Em análise", REJECTED: "❌ Rejeitado", PAUSED: "⏸ Pausado", DISABLED: "⛔ Desativado" };
 
@@ -557,6 +562,8 @@
     var view = $("#view");
     view.innerHTML = '<p class="empty">Carregando modelos…</p>';
     loadTemplates(true).then(function (list) {
+      var existentes = list.map(function (t) { return t.name; });
+      var faltam = TPL_SUGESTOES.filter(function (t) { return t.category === "UTILITY" && existentes.indexOf(t.name) < 0; });
       view.innerHTML = '<div class="panels" style="grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)">' +
         '<div class="panel"><h3>Modelos da conta (' + list.length + ")</h3>" +
           (list.length ? '<div class="table-wrap" style="box-shadow:none"><table><thead><tr><th>Nome</th><th>Status</th><th>Categoria</th><th>Texto</th><th></th></tr></thead><tbody>' +
@@ -568,6 +575,8 @@
           '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Modelos são exigidos pelo WhatsApp para iniciar conversa ou responder depois de 24h sem mensagem do cliente. A Meta analisa cada modelo (geralmente em minutos).</p>' +
         "</div>" +
         '<div class="panel"><h3>Criar modelo</h3>' +
+          (faltam.length ? '<p style="margin:0 0 10px"><button type="button" class="btn btn--primary btn--sm" id="tpl-utilidade">Enviar ' + faltam.length +
+            ' modelo(s) de utilidade para aprovação</button> <small class="muted">' + esc(faltam.map(function (t) { return t.name; }).join(", ")) + "</small></p>" : "") +
           '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Sugestões: ' + TPL_SUGESTOES.map(function (t, i) { return '<button type="button" class="btn btn--ghost btn--sm" data-sug="' + i + '" style="margin:2px">' + esc(t.name) + "</button>"; }).join("") + "</p>" +
           '<form id="tpl-form">' +
             '<div class="grid2"><label class="fld"><span>Nome (minúsculas e _)</span><input name="name" required pattern="[a-z0-9_]+" placeholder="followup_orcamento"></label>' +
@@ -590,6 +599,21 @@
         }).join("");
       }
       form.body.addEventListener("input", function () { syncExamples(); });
+      var bUtil = $("#tpl-utilidade");
+      if (bUtil) bUtil.addEventListener("click", function () {
+        bUtil.disabled = true;
+        var erros = [];
+        faltam.reduce(function (p, t) {
+          return p.then(function () {
+            return api("/whatsapp/templates", { method: "POST", body: { name: t.name, category: t.category, body: t.body, footer: t.footer, examples: t.examples } })
+              .catch(function (err) { erros.push(t.name + ": " + (err.serverMessage || ERR[err.code] || err.code)); });
+          });
+        }, Promise.resolve()).then(function () {
+          if (erros.length) alert("Alguns modelos não foram enviados:\n" + erros.join("\n"));
+          else toast("Modelos enviados para aprovação da Meta");
+          renderTemplates();
+        });
+      });
       $$("[data-sug]", view).forEach(function (b) {
         b.addEventListener("click", function () {
           var t = TPL_SUGESTOES[+b.getAttribute("data-sug")];

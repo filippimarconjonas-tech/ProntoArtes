@@ -8,7 +8,7 @@
  * - Sincronização manual: /admin › Tray › "Sincronizar pedidos recentes".
  */
 
-import { normalizePhone } from "./crm.js";
+import { normalizePhone, PIPELINE_CLIENTES, STAGE_CLIENTE_ANTIGO } from "./crm.js";
 import { getSettings, setSettings } from "./settings.js";
 import { htmlToText } from "./products.js";
 
@@ -16,6 +16,9 @@ const KEYS = ["tray_store_url", "tray_api_address", "tray_consumer_key", "tray_c
   "tray_access_token", "tray_refresh_token", "tray_token_expires", "tray_webhook_key", "tray_last_sync", "tray_last_webhook", "tray_last_error"];
 
 const now = () => new Date().toISOString();
+
+/** Pedido com mais dias que isso é compra antiga: o cliente vai para "Clientes antigos", não para o funil de vendas. */
+const DIAS_PEDIDO_ANTIGO = 30;
 
 async function trayConfig(env) {
   const s = await getSettings(env, KEYS);
@@ -210,10 +213,14 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
   const doDia = pedidoEm && Date.now() - Date.parse(pedidoEm) > 2 * 86400000 ? ` de ${diaBR(pedidoEm)}` : "";
   const itens = itensPedido(full);
   const comItens = itens.length ? ` · ${resumoItens(itens)}` : "";
+  // Pedido feito há mais de DIAS_PEDIDO_ANTIGO dias: é histórico de um cliente antigo, não uma venda de agora
+  const antigo = !!pedidoEm && Date.now() - Date.parse(pedidoEm) > DIAS_PEDIDO_ANTIGO * 86400000;
+  let criado = false;
   if (lead && map.status === status) return { pedido, status, lead_id: lead.id, acao: "sem mudanças" };
 
   if (!lead) {
     if (cls.kind === "cancelado" || cls.kind === "outro") return { pedido, status, acao: "ignorado (sem lead e pedido não pago)" };
+    if (antigo && cls.kind === "aguardando") return { pedido, status, acao: "ignorado (pedido antigo que nunca foi pago)" };
     let c = o.Customer || full.Customer || null;
     if (!c && o.customer_id) {
       try { c = (await api(env, `/customers/${encodeURIComponent(o.customer_id)}`, orcamento))?.Customer || null; }
@@ -227,10 +234,10 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
     if (!lead && email) lead = await env.DB.prepare("SELECT * FROM leads WHERE lower(email) = ? ORDER BY id DESC LIMIT 1").bind(email).first();
 
     // Cliente que já fechou outra venda: um pedido mais novo é recompra e vira nova oportunidade;
-    // um pedido anterior à venda registrada só entra no histórico do cliente
+    // um pedido anterior à venda registrada (ou antigo) só entra no histórico do cliente
     let recompra = false;
     if (lead && lead.stage === "ganho" && lead.pedido_tray && lead.pedido_tray !== pedido) {
-      if (pedidoEm && lead.won_at && pedidoEm < lead.won_at) {
+      if (antigo || (pedidoEm && lead.won_at && pedidoEm < lead.won_at)) {
         await env.DB.prepare(
           `INSERT INTO tray_orders (pedido, lead_id, status) VALUES (?, ?, ?)
            ON CONFLICT(pedido) DO UPDATE SET lead_id = excluded.lead_id, status = excluded.status, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`
@@ -255,8 +262,11 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
       // O cliente entrou no dia da compra, não no dia em que o CRM leu o pedido
       if (pedidoEm) await env.DB.prepare("UPDATE leads SET created_at = ? WHERE id = ? AND created_at > ?").bind(pedidoEm, r.id, pedidoEm).run();
       lead = await env.DB.prepare("SELECT * FROM leads WHERE id = ?").bind(r.id).first();
+      criado = !r.duplicate;
     }
   }
+  // Lead que já existia: um pedido antigo só entra no histórico (não troca pedido, valor nem pós-venda)
+  const soHistorico = antigo && !criado && lead.pedido_tray !== pedido;
 
   if (map) {
     // Outra notificação do mesmo pedido pode ter chegado junto: só uma aplica a mudança de status
@@ -268,17 +278,29 @@ async function applyOrderInner(env, orderId, deps, { orcamento = null } = {}, ma
   const sets = {};
   const events = [];
   if (!map || map.lead_id !== lead.id) events.push(`Pedido Tray nº ${pedido}${doDia} vinculado (${status})${comItens}.`);
-  if (cls.kind !== "cancelado" && lead.pedido_tray !== pedido) sets.pedido_tray = pedido;
+  if (cls.kind !== "cancelado" && !soHistorico && lead.pedido_tray !== pedido) sets.pedido_tray = pedido;
   // O que o cliente comprou aparece no cartão e na lista (só preenche se ninguém escreveu o produto)
   if (cls.kind !== "cancelado" && itens.length && !lead.produto) sets.produto = resumoItens(itens);
-  if (total && cls.kind !== "cancelado" && lead.valor !== total) sets.valor = total;
+  if (total && cls.kind !== "cancelado" && !soHistorico && lead.valor !== total) sets.valor = total;
 
-  if (cls.kind === "aguardando" && !["pagamento", "ganho"].includes(lead.stage)) {
+  if (cls.kind === "aguardando" && !antigo && !["pagamento", "ganho"].includes(lead.stage)) {
     Object.assign(sets, { pipeline: "vendas", stage: "pagamento", stage_changed_at: pedidoEm || agora, canal_fechamento: "site_tray" });
     events.push(`Pedido ${pedido} criado na loja (${status}) → Aguardando pagamento.`);
   }
 
-  if (cls.kind === "pago") {
+  if (cls.kind === "pago" && antigo && lead.stage !== "ganho") {
+    // Compra antiga: o cliente vai (ou fica) em Clientes antigos. Um lead em negociação agora não muda de etapa.
+    const venda = pagoEm || pedidoEm;
+    if (criado || lead.pipeline === PIPELINE_CLIENTES) {
+      if (lead.pipeline !== PIPELINE_CLIENTES || lead.stage !== STAGE_CLIENTE_ANTIGO) {
+        Object.assign(sets, { pipeline: PIPELINE_CLIENTES, stage: STAGE_CLIENTE_ANTIGO, stage_changed_at: agora, canal_fechamento: "site_tray" });
+        events.push(`Compra antiga: pedido ${pedido}${doDia} (${status}) → Clientes antigos.`);
+      }
+      if (!lead.won_at || venda > lead.won_at) sets.won_at = venda;
+    } else {
+      events.push(`Compra antiga registrada no histórico: pedido ${pedido}${doDia} (${status}). O lead continua na etapa atual.`);
+    }
+  } else if (cls.kind === "pago" && !soHistorico) {
     if (lead.stage !== "ganho") {
       const venda = pagoEm || agora;
       Object.assign(sets, { pipeline: "vendas", stage: "ganho", stage_changed_at: venda, won_at: venda, lost_at: null, canal_fechamento: "site_tray" });
@@ -463,8 +485,34 @@ export async function syncTray(env, deps, limit = 30) {
 
 export { TrayError };
 
+/**
+ * Uma vez só: leva para "Clientes antigos" os leads que a Tray criou como "Venda fechada" a partir de
+ * pedidos antigos (o pedido é de mais de DIAS_PEDIDO_ANTIGO dias antes de o lead entrar no CRM).
+ */
+export async function moverClientesAntigos(env, deps) {
+  const FLAG = "clientes_antigos_migrado";
+  if ((await getSettings(env, [FLAG]))[FLAG]) return { movidos: 0 };
+  const { results } = await env.DB.prepare(
+    `SELECT l.id, l.pedido_tray, l.created_at FROM leads l
+      WHERE l.canal_entrada = 'tray' AND l.pipeline = 'vendas' AND l.stage = 'ganho'
+        AND EXISTS (SELECT 1 FROM lead_events e WHERE e.lead_id = l.id AND e.type = 'criado'
+                      AND julianday(e.created_at) - julianday(COALESCE(l.won_at, l.created_at)) > ?)`
+  ).bind(DIAS_PEDIDO_ANTIGO).all();
+  const agora = now();
+  for (const l of results) {
+    await env.DB.prepare("UPDATE leads SET pipeline = ?, stage = ?, stage_changed_at = ?, updated_at = ? WHERE id = ? AND stage = 'ganho'")
+      .bind(PIPELINE_CLIENTES, STAGE_CLIENTE_ANTIGO, agora, agora, l.id).run();
+    await deps.logEvent(env, l.id, "etapa",
+      `Funil de vendas › Venda fechada → Clientes antigos › Cliente antigo (compra antiga: pedido Tray nº ${l.pedido_tray} de ${diaBR(l.created_at)}).`, "Tray");
+  }
+  await setSettings(env, { [FLAG]: agora });
+  console.log("clientes_antigos", JSON.stringify({ movidos: results.length }));
+  return { movidos: results.length };
+}
+
 /** Sincronização automática (Cron Trigger do Worker): recupera pedidos cujas notificações falharam. */
 export async function scheduledTraySync(env, deps) {
+  await moverClientesAntigos(env, deps).catch((err) => console.error("clientes_antigos_error", err?.message));
   const cfg = await trayConfig(env);
   if (!cfg.api || !(cfg.token || cfg.refresh)) return; // loja ainda não autorizada
   const r = await syncTray(env, deps);

@@ -76,8 +76,8 @@ async function upsertLead(env, input, { canal = "site", user = null } = {}) {
     let { pipeline, stage } = existing;
     let moved = "";
 
-    // Lead perdido ou em nutrição que volta com intenção de compra → reabre no funil de vendas
-    if (stage === "perdido" || (pipeline === "nutricao" && faixa !== "C")) {
+    // Lead perdido, cliente antigo ou em nutrição que volta com intenção de compra → reabre no funil de vendas
+    if (stage === "perdido" || pipeline === "clientes" || (pipeline === "nutricao" && faixa !== "C")) {
       ({ pipeline, stage } = entryPoint(faixa));
       moved = ` Movido para ${PIPELINES[pipeline].label} › ${stageLabel(pipeline, stage)}.`;
     }
@@ -260,7 +260,7 @@ async function stats(env, days) {
           SUM(CASE WHEN stage='ganho' THEN 1 ELSE 0 END) AS ganhos,
           SUM(CASE WHEN stage='ganho' THEN COALESCE(valor,0) ELSE 0 END) AS receita,
           SUM(CASE WHEN stage='perdido' THEN 1 ELSE 0 END) AS perdidos,
-          SUM(CASE WHEN stage NOT IN ('ganho','perdido','sem_interesse') THEN 1 ELSE 0 END) AS abertos,
+          SUM(CASE WHEN stage NOT IN ('ganho','perdido','sem_interesse','cliente_antigo') THEN 1 ELSE 0 END) AS abertos,
           SUM(CASE WHEN created_at >= strftime('%Y-%m-%dT03:00:00','now','-3 hours') THEN 1 ELSE 0 END) AS hoje
         FROM leads WHERE created_at >= ?`, since),
     q(`SELECT faixa, COUNT(*) AS n, SUM(CASE WHEN stage='ganho' THEN 1 ELSE 0 END) AS ganhos,
@@ -278,7 +278,7 @@ async function stats(env, days) {
     q(`SELECT COUNT(*) AS sem_contato,
           SUM(CASE WHEN created_at < strftime('%Y-%m-%dT%H:%M:%fZ','now','-15 minutes') THEN 1 ELSE 0 END) AS atrasados,
           (SELECT COUNT(*) FROM leads WHERE next_followup_at IS NOT NULL AND next_followup_at <= strftime('%Y-%m-%dT02:59:59','now','-3 hours','+1 day')
-             AND stage NOT IN ('ganho','perdido','sem_interesse')) AS followups_hoje,
+             AND stage NOT IN ('ganho','perdido','sem_interesse','cliente_antigo')) AS followups_hoje,
           (SELECT AVG((julianday(first_contact_at) - julianday(created_at)) * 1440) FROM leads WHERE first_contact_at IS NOT NULL AND created_at >= ?) AS min_primeiro_contato
         FROM leads WHERE pipeline='vendas' AND stage='novo'`, since)
   ]);

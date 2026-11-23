@@ -24,8 +24,21 @@ export const PIPELINES = {
       { id: "reaquecido", label: "Reaquecido", hint: "Voltou a demonstrar interesse — mova para o funil de vendas." },
       { id: "sem_interesse", label: "Sem interesse", hint: "Pediu para não receber contato ou não respondeu." }
     ]
+  },
+  clientes: {
+    label: "Clientes antigos",
+    stages: [
+      { id: "cliente_antigo", label: "Cliente antigo", hint: "Comprou na loja Tray há mais de 30 dias e entrou no CRM por um pedido antigo. Se voltar a falar no WhatsApp ou fizer orçamento, vai para o funil de vendas." }
+    ]
   }
 };
+
+/** Clientes que entraram no CRM por pedidos antigos da Tray (histórico, não venda nova). */
+export const PIPELINE_CLIENTES = "clientes";
+export const STAGE_CLIENTE_ANTIGO = "cliente_antigo";
+
+/** Etapas sem atendimento pendente (não contam como abertas nem geram avisos). */
+export const STAGES_FECHADAS = ["ganho", "perdido", "sem_interesse", STAGE_CLIENTE_ANTIGO];
 
 export const POST_STAGES = [
   { id: "pago", label: "Pedido pago" },

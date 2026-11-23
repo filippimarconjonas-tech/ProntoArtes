@@ -1,6 +1,8 @@
 :root {
   --brand: #15803d;
   --brand-dark: #116632;
+  --btn: #1c9450;
+  --btn-hover: #178544;
   --brand-soft: #e7f5ec;
   --gold: #22a55a;
   --ink: #17231c;
@@ -31,8 +33,11 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 
 /* Botões */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px solid transparent; border-radius: 10px; padding: 9px 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
-.btn--primary { background: var(--brand); color: #fff; }
-.btn--primary:hover { background: var(--brand-dark); }
+.btn { transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease; }
+.btn--primary { background: var(--btn); color: #fff; box-shadow: 0 0 0 3px rgba(28, 148, 80, .12), 0 2px 8px rgba(28, 148, 80, .22); }
+.btn--primary:hover { background: var(--btn-hover); transform: translateY(-1px) scale(1.02); box-shadow: 0 0 0 4px rgba(28, 148, 80, .16), 0 6px 16px rgba(28, 148, 80, .28); }
+.btn--primary:active { transform: scale(.99); box-shadow: 0 0 0 3px rgba(28, 148, 80, .12); }
+.btn:disabled { transform: none; }
 .btn--ghost { background: #fff; border-color: var(--line); color: var(--ink); }
 .btn--ghost:hover { border-color: var(--ink); }
 .btn--wa { background: var(--wa); color: #fff; }

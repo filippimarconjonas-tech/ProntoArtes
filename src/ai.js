@@ -227,7 +227,7 @@ function contextoLead(lead) {
     ["Nome", lead.nome && !/^Contato WhatsApp$/.test(lead.nome) ? lead.nome : null],
     ["Cidade", lead.cidade], ["Produto de interesse", lead.produto], ["Linha de interesse", lead.interesse],
     ["Espaço", lead.espaco], ["Quando pretende comprar", lead.prazo], ["Descrição do projeto", lead.mensagem],
-    ["Etapa no CRM", `${PIPELINES[lead.pipeline]?.label || lead.pipeline} › ${stageLabel(lead.pipeline, lead.stage)}`],
+    ["Etapa no CRM", lead.pipeline ? `${PIPELINES[lead.pipeline]?.label || lead.pipeline} › ${stageLabel(lead.pipeline, lead.stage)}` : null],
     ["Origem", lead.origem]
   ].filter(([, v]) => v);
   return linhas.map(([k, v]) => `${k}: ${v}`).join("\n");
@@ -258,7 +258,7 @@ function transcricao(msgs) {
    Chamada à API
    ------------------------------------------------------------------ */
 
-async function gerar(env, { lead, msgs, tipo, background = false }) {
+async function gerar(env, { lead, msgs, tipo, background = false, canal = "" }) {
   if (!env.ANTHROPIC_API_KEY) throw new AiError("sem_chave_ia", "Cadastre o Secret ANTHROPIC_API_KEY no Worker (Cloudflare › Settings › Variables and Secrets).");
   const cfg = await aiConfig(env);
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: background ? 0 : 1 });
@@ -269,7 +269,7 @@ async function gerar(env, { lead, msgs, tipo, background = false }) {
 <conversa>\n${transcricao(msgs)}\n</conversa>
 
 Agora: ${dataHoraSP()} (horário de Brasília). A equipe de vendas está ${aberto ? "em horário de atendimento" : "fora do horário de atendimento"}.
-Escreva a próxima mensagem da loja para este cliente.${msgs.length && msgs[msgs.length - 1].de === "loja" ? " A última mensagem foi da loja: escreva um acompanhamento gentil, sem repetir o que já foi dito." : ""}`;
+${canal ? canal + "\n" : ""}Escreva a próxima mensagem da loja para este cliente.${msgs.length && msgs[msgs.length - 1].de === "loja" ? " A última mensagem foi da loja: escreva um acompanhamento gentil, sem repetir o que já foi dito." : ""}`;
 
   const system = [{ type: "text", text: systemPrompt(cfg, await catalogo(env)), cache_control: { type: "ephemeral", ttl: "1h" } }];
   const messages = [{ role: "user", content: user }];
@@ -439,4 +439,18 @@ export async function onInboundMessage(env, leadId, inboundAt, logEvent) {
     console.error("ia_error", err?.code || "", err?.message);
     await logEvent(env, leadId, "ia", "A IA não conseguiu responder: " + (err?.message || "erro"), "IA");
   }
+}
+
+/**
+ * Sugestão de resposta para uma conversa do Instagram (o vendedor revisa antes de enviar).
+ * modo: "dm" (direct), "publico" (resposta no post, todo mundo vê) ou "privado" (direct a partir de um comentário).
+ */
+export async function sugerirInstagram(env, { contato, msgs, modo }) {
+  const lead = { nome: contato.name || null, origem: "Instagram" + (contato.username ? " (@" + contato.username + ")" : "") };
+  const canal = modo === "publico"
+    ? "Canal: resposta PÚBLICA a um comentário num post do Instagram. Todo mundo vê: escreva 1 ou 2 frases curtas e simpáticas, sem preço nem dados do cliente, e convide para continuar no direct ou no WhatsApp."
+    : "Canal: direct do Instagram" + (modo === "privado" ? " (primeira mensagem no direct para quem comentou num post)" : "") +
+      ". Mensagem curta, em tom de conversa. Para orçamento com fotos e frete, convide para o WhatsApp da loja ou peça a cidade de entrega.";
+  const r = await gerar(env, { lead, msgs, tipo: "instagram", canal: canal + " Quem vai enviar é um vendedor da equipe: não diga que vai passar para um especialista." });
+  return { texto: r.resposta, nota: r.nota_interna || "" };
 }

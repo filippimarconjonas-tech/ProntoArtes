@@ -73,6 +73,15 @@ nada é gravado: "Testar leitura" mostra só uma amostra e os campos recebidos.
 - Notificações: `/api/tray/webhook?key=…` (URL exibida no painel). Responde 200 na hora e processa em seguida; pedidos são sempre relidos na API da Tray.
 - Sincronização automática a cada 30 minutos (Cron Trigger em `wrangler.jsonc`) recupera notificações que falharam. O último erro aparece no painel.
 
+## Instagram (@pronto.artes)
+`/admin` › Instagram: direct e comentários dos posts numa caixa de entrada, com resposta pelo CRM.
+- Usa a API do Instagram com login do Instagram (`graph.instagram.com`), sem Página do Facebook. Cadastre o ID e a chave secreta
+  do app do Instagram (Meta for Developers › Instagram) e clique em Conectar. O token dura 60 dias e é renovado pelo cron.
+- Webhook: `/api/instagram/webhook` (campos `messages` e `comments`); login: `/api/instagram/callback` (URI de redirecionamento OAuth).
+- Respostas: direct (até 24h depois da última mensagem da pessoa), resposta pública no post ou direct a partir do comentário
+  (uma por comentário, até 7 dias). Sugestões prontas e "Sugerir com IA" (usa a mesma chave do Atendimento IA).
+- Tabelas `ig_contacts` e `ig_messages` (migração `0007_instagram.sql`).
+
 ## Páginas legais
 `/privacidade` e `/exclusao-de-dados` — usar nos campos de URL do app na Meta.
 

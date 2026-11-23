@@ -20,8 +20,12 @@ import { avisosStatus, saveAvisos, enviarAviso, verificarAguardando } from "./av
 import { sendToLead, sendMediaToLead, listTemplates, createTemplate, deleteTemplate, midiaResponse } from "./wa-api.js";
 import { handleWhatsAppWebhook, whatsappStatus, saveWhatsAppSettings, connectWhatsApp, completeEmbeddedSignup, diagnoseWhatsApp } from "./whatsapp.js";
 import {
+  handleInstagramWebhook, handleInstagramCallback, instagramStatus, saveInstagramSettings, authUrl as instagramAuthUrl,
+  disconnectInstagram, refreshInstagramToken, listConversas, getConversa, responder as responderInstagram, paraIa
+} from "./instagram.js";
+import {
   aiStatus, saveAiSettings, testAi, simulateAi, draftForLead, sendDraft, discardDraft, setLeadAi,
-  pauseOnHumanReply, onInboundMessage
+  pauseOnHumanReply, onInboundMessage, sugerirInstagram
 } from "./ai.js";
 
 const FORM_FIELDS = ["nome", "whatsapp", "cidade", "email", "produto", "interesse", "espaco", "prazo", "mensagem"];
@@ -380,6 +384,37 @@ async function handleAdminApi(request, env, url) {
     return json({ ok: true }, 200, { "set-cookie": cookie });
   }
 
+  if (path === "/instagram" || path.startsWith("/instagram/")) {
+    try {
+      if (path === "/instagram" && method === "GET") return json({ ok: true, ...(await instagramStatus(env, url.origin)) });
+      if (path === "/instagram" && method === "POST") {
+        await saveInstagramSettings(env, (await readJson(request)) || {});
+        return json({ ok: true, ...(await instagramStatus(env, url.origin)) });
+      }
+      if (path === "/instagram/conectar" && method === "POST") return json({ ok: true, url: await instagramAuthUrl(env, url.origin) });
+      if (path === "/instagram/desconectar" && method === "POST") { await disconnectInstagram(env); return json({ ok: true }); }
+      if (path === "/instagram/conversas" && method === "GET") return json({ ok: true, conversas: await listConversas(env) });
+      const cm = path.match(/^\/instagram\/conversas\/(\d+)(\/responder|\/sugestao)?$/);
+      if (cm && !cm[2] && method === "GET") {
+        const conv = await getConversa(env, cm[1]);
+        return conv ? json({ ok: true, ...conv }) : json({ ok: false, error: "not_found" }, 404);
+      }
+      if (cm && cm[2] === "/responder" && method === "POST") {
+        await responderInstagram(env, cm[1], (await readJson(request)) || {}, user.username);
+        return json({ ok: true, ...(await getConversa(env, cm[1])) });
+      }
+      if (cm && cm[2] === "/sugestao" && method === "POST") {
+        const conv = await getConversa(env, cm[1]);
+        if (!conv) return json({ ok: false, error: "not_found" }, 404);
+        const body = (await readJson(request)) || {};
+        return json({ ok: true, ...(await sugerirInstagram(env, { contato: conv.contato, msgs: paraIa(conv), modo: body.modo })) });
+      }
+    } catch (err) {
+      if (err.code) return json({ ok: false, error: err.code, message: err.message }, 400);
+      throw err;
+    }
+  }
+
   if (path === "/whatsapp" && method === "GET") return json({ ok: true, ...(await whatsappStatus(env, url.origin)) });
   if (path === "/whatsapp" && method === "POST") {
     try {
@@ -603,7 +638,10 @@ export default {
       ? verificarAguardando(env, logEvent).catch((err) => console.error("avisos_cron_error", err?.message))
       : event.cron === CRON_CATALOGO
       ? scheduledProdutosTray(env).catch((err) => console.error("tray_produtos_cron_error", err?.message))
-      : scheduledTraySync(env, { upsertLead, logEvent }).catch((err) => console.error("tray_cron_error", err?.message));
+      : Promise.all([
+        scheduledTraySync(env, { upsertLead, logEvent }).catch((err) => console.error("tray_cron_error", err?.message)),
+        refreshInstagramToken(env).catch((err) => console.error("instagram_token_error", err?.message))
+      ]);
     ctx.waitUntil(job);
   },
 
@@ -623,6 +661,15 @@ export default {
         return await handleTrayWebhook(request, env, { upsertLead, logEvent, waitUntil: (p) => ctx.waitUntil(p) });
       } catch (err) {
         console.error("tray_error", err?.stack || err?.message);
+        return new Response("Erro", { status: 500 });
+      }
+    }
+    if (p === "/api/instagram/callback") return handleInstagramCallback(request, env, async (req) => !!(await getSessionUser(req, env)));
+    if (p === "/api/instagram/webhook") {
+      try {
+        return await handleInstagramWebhook(request, env, { waitUntil: (p) => ctx.waitUntil(p) });
+      } catch (err) {
+        console.error("instagram_error", err?.stack || err?.message);
         return new Response("Erro", { status: 500 });
       }
     }

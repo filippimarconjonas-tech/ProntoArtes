@@ -147,7 +147,7 @@
   }
 
   /* ---------------- roteamento ---------------- */
-  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", clientes: "Clientes antigos", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos", ia: "Atendimento com IA" };
+  var TITLES = { dashboard: "Painel", vendas: "Funil de vendas", nutricao: "Nutrição — Leads C", clientes: "Clientes antigos", instagram: "Instagram", posvenda: "Pós-venda", lista: "Todos os leads", whatsapp: "Integração WhatsApp", modelos: "Modelos de mensagem", tray: "Integração Loja Tray", produtos: "Catálogo de produtos", ia: "Atendimento com IA" };
 
   function route() {
     var v = (location.hash || "#dashboard").slice(1).split("?")[0];
@@ -164,6 +164,7 @@
     if (v === "vendas" || v === "nutricao" || v === "clientes") return renderBoard(v);
     if (v === "posvenda") return renderPostSale();
     if (v === "whatsapp") return renderWhatsApp();
+    if (v === "instagram") return renderInstagram();
     if (v === "modelos") return renderTemplates();
     if (v === "tray") return renderTray();
     if (v === "produtos") return renderProducts();
@@ -357,6 +358,267 @@
         if (id) onDrop(id, col.getAttribute("data-stage"));
         dragId = null;
       });
+    });
+  }
+
+  /* ---------------- Instagram (direct e comentários) ---------------- */
+  var IG = { sel: null, conv: null, lista: [], modo: "dm", comment: null, filtro: "todas" };
+  var IG_SUGESTOES = {
+    dm: [
+      "Olá! Tudo bem? 😊 Obrigado pelo contato com a Pronto Artes. Como posso te ajudar?",
+      "Para calcular o frete, qual é a sua cidade de entrega?",
+      "Posso te enviar fotos, medidas e valores pelo WhatsApp? Me chama no (24) 98837-0399 ou me passa seu número que eu te chamo.",
+      "Você encontra todos os modelos e valores em www.prontoartes.com.br 🌿 Pagando no PIX tem 10% de desconto."
+    ],
+    publico: [
+      "Obrigado pelo comentário! 😊 Te chamamos no direct com os detalhes.",
+      "Que bom que gostou! 🌿 Enviamos para todo o Brasil. Chama a gente no direct para receber valores e frete.",
+      "Oi! Te mandamos as informações no direct 😉"
+    ],
+    privado: [
+      "Olá! Vi seu comentário no nosso post 😊 Quer que eu te passe valores, medidas e o frete para a sua cidade?",
+      "Oi! Obrigado pelo interesse 🌿 Qual peça chamou sua atenção? Te passo os detalhes por aqui."
+    ]
+  };
+  var IG_MODOS = { dm: "Direct", publico: "Resposta pública no post", privado: "Direct a partir do comentário" };
+
+  function igNome(c) { return c.username ? "@" + c.username : (c.name || "Instagram " + String(c.ig_id).slice(-4)); }
+
+  function renderInstagram() {
+    var view = $("#view");
+    view.innerHTML = '<p class="empty">Carregando…</p>';
+    var q = (location.hash.split("?")[1] || "");
+    var m = q.match(/(?:^|&)ig=(\w+)/), msg = q.match(/(?:^|&)msg=([^&]*)/);
+    if (m) {
+      if (m[1] === "ok") toast("Instagram conectado ✓");
+      else toast("Não foi possível conectar: " + decodeURIComponent((msg && msg[1]) || "erro"), true);
+      history.replaceState(null, "", "#instagram");
+    }
+    api("/instagram").then(function (st) {
+      S.igStatus = st;
+      if (!st.conectado) return renderIgSetup(st);
+      view.innerHTML =
+        '<div class="ig">' +
+          '<aside class="ig__side"><div class="ig__filtros">' +
+            ["todas", "naolidas", "dm", "comentario"].map(function (f) {
+              return '<button type="button" class="btn btn--sm ' + (IG.filtro === f ? "btn--primary" : "btn--ghost") + '" data-igf="' + f + '">' +
+                { todas: "Todas", naolidas: "Não lidas", dm: "Direct", comentario: "Comentários" }[f] + "</button>";
+            }).join("") + "</div>" +
+            '<div class="ig__list" id="ig-list"></div>' +
+            '<p class="muted ig__conta">Conectado como <strong>@' + esc(st.usuario || "") + '</strong> · <a href="#" id="ig-config">configuração</a></p>' +
+          "</aside>" +
+          '<section class="ig__thread" id="ig-thread"><p class="empty">Escolha uma conversa.</p></section>' +
+        "</div>";
+      $$("[data-igf]", view).forEach(function (b) {
+        b.addEventListener("click", function () { IG.filtro = b.getAttribute("data-igf"); renderInstagram(); });
+      });
+      $("#ig-config").addEventListener("click", function (e) { e.preventDefault(); renderIgSetup(st); });
+      igLoadList().then(function () { if (IG.sel) igOpen(IG.sel, true); });
+    }).catch(function (err) {
+      view.innerHTML = '<div class="panel"><h3>Instagram</h3><p class="empty">' + esc(err.serverMessage || ERR[err.code] || err.code) + "</p></div>";
+    });
+  }
+
+  function igLoadList() {
+    return api("/instagram/conversas").then(function (d) {
+      IG.lista = d.conversas;
+      igUpdateCount();
+      var box = $("#ig-list");
+      if (!box) return;
+      var l = IG.lista.filter(function (c) {
+        if (IG.filtro === "naolidas") return c.unread > 0;
+        if (IG.filtro === "dm" || IG.filtro === "comentario") return c.last_kind === IG.filtro;
+        return true;
+      });
+      box.innerHTML = l.length ? l.map(function (c) {
+        var espera = c.last_inbound_at && (!c.last_outbound_at || c.last_inbound_at > c.last_outbound_at);
+        return '<button type="button" class="ig__item' + (IG.sel === c.ig_id ? " is-on" : "") + '" data-ig="' + esc(c.ig_id) + '">' +
+          avatar({ nome: c.username || c.name || "?" }) +
+          '<span class="ig__item-txt"><strong>' + esc(igNome(c)) + "</strong>" +
+          '<small>' + (c.last_kind === "comentario" ? "💬 " : "✉️ ") + esc(c.last_text || "") + "</small></span>" +
+          '<span class="ig__item-meta"><time>' + (c.last_at ? esc(ago(c.last_at)) : "") + "</time>" +
+          (c.unread ? '<b class="count">' + c.unread + "</b>" : espera ? '<span class="tag tag--warn">responder</span>' : "") + "</span></button>";
+      }).join("") : '<p class="empty" style="padding:12px">' + (IG.lista.length ? "Nada neste filtro." : "Nenhuma mensagem ainda. Quando alguém mandar direct ou comentar num post, aparece aqui.") + "</p>";
+      $$("[data-ig]", box).forEach(function (b) { b.addEventListener("click", function () { igOpen(b.getAttribute("data-ig")); }); });
+    });
+  }
+
+  function igUpdateCount() {
+    var n = IG.lista.reduce(function (a, c) { return a + (c.unread || 0); }, 0);
+    var el = $('[data-count="instagram"]');
+    if (el) el.textContent = n || "";
+  }
+
+  function igOpen(id, keepComposer) {
+    var keep = keepComposer && IG.sel === id && $("#ig-text") ? $("#ig-text").value : null;
+    IG.sel = id;
+    $$(".ig__item").forEach(function (b) { b.classList.toggle("is-on", b.getAttribute("data-ig") === id); });
+    return api("/instagram/conversas/" + id).then(function (d) {
+      var mudou = !IG.conv || IG.conv.contato.ig_id !== id;
+      IG.conv = d;
+      if (mudou || keep === null) igDefaultModo();
+      igRenderThread(keep);
+      var it = IG.lista.filter(function (c) { return c.ig_id === id; })[0];
+      if (it && it.unread) { it.unread = 0; igUpdateCount(); igLoadList(); }
+    }).catch(fail);
+  }
+
+  // Direct se a janela de 24h estiver aberta; senão, responde o último comentário no post
+  function igDefaultModo() {
+    var d = IG.conv;
+    var ultimoComent = d.mensagens.filter(function (m) { return m.kind === "comentario" && m.direction === "in"; }).pop();
+    var ultima = d.mensagens.filter(function (m) { return m.direction === "in"; }).pop();
+    if (ultima && ultima.kind === "comentario") { IG.modo = "publico"; IG.comment = ultima.id; }
+    else if (d.pode_dm) { IG.modo = "dm"; IG.comment = null; }
+    else if (ultimoComent) { IG.modo = "publico"; IG.comment = ultimoComent.id; }
+    else { IG.modo = "dm"; IG.comment = null; }
+  }
+
+  function igBubble(m) {
+    var out = m.direction === "out";
+    var tipo = m.kind === "comentario"
+      ? (out ? "↩️ Resposta pública no post" : "💬 Comentou no post")
+      : (m.reply_mode === "privado" ? "✉️ Direct (resposta ao comentário)" : "");
+    var acoes = "";
+    if (m.kind === "comentario" && !out) {
+      acoes = '<span class="ig__acoes"><button type="button" class="btn btn--ghost btn--sm" data-resp="publico" data-c="' + esc(m.id) + '">Responder no post</button>' +
+        (m.pode_privada ? '<button type="button" class="btn btn--ghost btn--sm" data-resp="privado" data-c="' + esc(m.id) + '">Responder no direct</button>' : "") + "</span>";
+    }
+    return '<div class="chat__msg chat__msg--' + (out ? "out" : "in") + (IG.comment === m.id && IG.modo !== "dm" ? " is-sel" : "") + '">' +
+      (tipo ? '<small class="chat__note" style="margin:0 0 4px">' + tipo +
+        (m.media_link ? ' · <a href="' + esc(m.media_link) + '" target="_blank" rel="noopener">ver post</a>' : "") + "</small>" : "") +
+      esc(m.text || "[" + (m.attachment || "mensagem") + "]") +
+      '<small class="chat__note">' + esc(fmtDate(m.created_at, true)) + (m.user ? " · " + esc(m.user) : "") + "</small>" + acoes + "</div>";
+  }
+
+  function igRenderThread(texto) {
+    var d = IG.conv, c = d.contato, th = $("#ig-thread");
+    if (!th) return;
+    var alvo = IG.comment && d.mensagens.filter(function (m) { return m.id === IG.comment; })[0];
+    var aviso = IG.modo === "dm" && !d.pode_dm
+      ? "Fora da janela de 24h do direct: o Instagram só deixa responder no direct até 24h depois da última mensagem da pessoa. Responda um comentário no post ou aguarde ela escrever."
+      : "";
+    th.innerHTML =
+      '<header class="ig__head">' + avatar({ nome: c.username || c.name || "?" }) +
+        '<div><strong>' + esc(igNome(c)) + "</strong>" + (c.name && c.username ? '<small class="muted"> · ' + esc(c.name) + "</small>" : "") +
+        (c.username ? '<br><a class="muted" href="https://www.instagram.com/' + esc(c.username) + '/" target="_blank" rel="noopener">abrir perfil</a>' : "") + "</div>" +
+        '<button type="button" class="btn btn--ghost btn--sm ig__voltar" id="ig-voltar">← Conversas</button></header>' +
+      '<div class="chat ig__chat" id="ig-chat">' + d.mensagens.map(igBubble).join("") + "</div>" +
+      '<form class="ig__composer" id="ig-form">' +
+        '<div class="ig__modo"><span>Respondendo: <strong>' + esc(IG_MODOS[IG.modo]) + "</strong>" +
+          (alvo && IG.modo !== "dm" ? ' ao comentário “' + esc(String(alvo.text || "").slice(0, 60)) + '”' : "") + "</span>" +
+          (IG.modo !== "dm" ? ' <button type="button" class="btn btn--ghost btn--sm" id="ig-dm">usar direct</button>' : "") + "</div>" +
+        (aviso ? '<p class="form-msg">' + esc(aviso) + "</p>" : "") +
+        '<div class="ig__sug">' + IG_SUGESTOES[IG.modo].map(function (s, i) {
+          return '<button type="button" class="chip" data-sug="' + i + '" title="' + esc(s) + '">' + esc(s.length > 48 ? s.slice(0, 46) + "…" : s) + "</button>";
+        }).join("") + '<button type="button" class="chip chip--ia" id="ig-ia">✨ Sugerir com IA</button></div>' +
+        '<textarea id="ig-text" rows="3" maxlength="1000" placeholder="Escreva a resposta…"></textarea>' +
+        '<div class="modal__actions" style="justify-content:flex-end;margin:0"><span class="muted" id="ig-ia-nota" style="margin-right:auto;font-size:12px"></span>' +
+          '<button class="btn btn--primary" id="ig-send"' + (aviso ? " disabled" : "") + ">Enviar no Instagram</button></div>" +
+      "</form>";
+    $(".ig").classList.add("is-open");
+    var ta = $("#ig-text"), chat = $("#ig-chat");
+    if (texto) ta.value = texto;
+    chat.scrollTop = chat.scrollHeight;
+    $("#ig-voltar").addEventListener("click", function () { $(".ig").classList.remove("is-open"); });
+    $$("[data-resp]", th).forEach(function (b) {
+      b.addEventListener("click", function () { IG.modo = b.getAttribute("data-resp"); IG.comment = b.getAttribute("data-c"); igRenderThread(ta.value); $("#ig-text").focus(); });
+    });
+    var bdm = $("#ig-dm");
+    if (bdm) bdm.addEventListener("click", function () { IG.modo = "dm"; IG.comment = null; igRenderThread(ta.value); });
+    $$("[data-sug]", th).forEach(function (b) {
+      b.addEventListener("click", function () { ta.value = IG_SUGESTOES[IG.modo][+b.getAttribute("data-sug")]; ta.focus(); });
+    });
+    $("#ig-ia").addEventListener("click", function () {
+      var bt = this; bt.disabled = true; bt.textContent = "✨ Pensando…";
+      api("/instagram/conversas/" + c.ig_id + "/sugestao", { method: "POST", body: { modo: IG.modo } }).then(function (r) {
+        if (r.texto) ta.value = r.texto;
+        $("#ig-ia-nota").textContent = r.nota ? "Nota da IA: " + r.nota : "";
+        ta.focus();
+      }).catch(fail).then(function () { bt.disabled = false; bt.textContent = "✨ Sugerir com IA"; });
+    });
+    $("#ig-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var text = ta.value.trim();
+      if (!text) return ta.focus();
+      var bs = $("#ig-send"); bs.disabled = true; bs.textContent = "Enviando…";
+      api("/instagram/conversas/" + c.ig_id + "/responder", { method: "POST", body: { text: text, modo: IG.modo, comment_id: IG.comment } }).then(function (r) {
+        IG.conv = r;
+        toast(IG.modo === "publico" ? "Resposta publicada no post" : "Mensagem enviada no direct");
+        if (IG.modo === "privado") { IG.modo = "dm"; IG.comment = null; }
+        igRenderThread("");
+        igLoadList();
+      }).catch(function (err) { fail(err); bs.disabled = false; bs.textContent = "Enviar no Instagram"; });
+    });
+  }
+
+  // Atualiza a caixa sem apagar o que está sendo digitado
+  function igPoll() {
+    if (S.view !== "instagram" || document.hidden || !S.igStatus || !S.igStatus.conectado) return;
+    igLoadList().then(function () {
+      if (!IG.sel || !IG.conv) return;
+      var it = IG.lista.filter(function (c) { return c.ig_id === IG.sel; })[0];
+      if (it && it.last_at !== IG.conv.contato.last_at) igOpen(IG.sel, true);
+    }).catch(function () {});
+  }
+  setInterval(igPoll, 15000);
+
+  function renderIgSetup(st) {
+    var view = $("#view");
+    view.innerHTML =
+      '<div class="panels" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' +
+      '<div class="panel"><h3>Status</h3><dl class="answers">' +
+        row("Situação", st.conectado ? "✅ Conectado como @" + (st.usuario || "") + (st.conectado_em ? " em " + fmtDate(st.conectado_em, true) : "") : "⏳ Não conectado") +
+        row("Acesso válido até", st.token_expira ? fmtDate(st.token_expira) + " (renovado automaticamente)" : "") +
+        row("Última notificação", st.ultima_notificacao ? fmtDate(st.ultima_notificacao, true) + " (há " + ago(st.ultima_notificacao) + ")" : "nenhuma ainda") +
+        row("Conversas", num(st.conversas || 0)) +
+      "</dl>" +
+      (st.ultimo_erro ? '<p class="form-msg">Último erro: ' + esc((function () { try { var e = JSON.parse(st.ultimo_erro); return e.etapa + " — " + e.erro; } catch (x) { return st.ultimo_erro; } })()) + "</p>" : "") +
+      '<div class="modal__actions" style="justify-content:flex-start">' +
+        '<button type="button" class="btn btn--primary" id="ig-conectar"' + (!st.app_id || !st.tem_app_secret ? " disabled" : "") + ">" + (st.conectado ? "Reconectar" : "Conectar Instagram") + "</button>" +
+        (st.conectado ? '<button type="button" class="btn btn--ghost" id="ig-abrir">Abrir conversas</button><button type="button" class="btn btn--danger" id="ig-sair">Desconectar</button>' : "") +
+      "</div>" +
+      '<p class="muted" style="font-size:12.5px;margin:10px 0 0">' + (!st.app_id || !st.tem_app_secret ? "Preencha o ID e a chave secreta do app para liberar o botão. " : "") +
+        "Ao conectar, entre com a conta <strong>@pronto.artes</strong> e aceite as permissões.</p></div>" +
+
+      '<div class="panel"><h3>App do Instagram (Meta for Developers)</h3><form id="ig-form-cfg">' +
+        '<label class="fld"><span>ID do app do Instagram</span><input name="app_id" inputmode="numeric" value="' + esc(st.app_id || "") + '" placeholder="Ex.: 1234567890123456"></label>' +
+        '<label class="fld"><span>Chave secreta do app do Instagram ' + (st.tem_app_secret ? "(salva ✓ — preencha só para trocar)" : "") + '</span><input name="app_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore readonly placeholder="' + (st.tem_app_secret ? "••••••••" : "Cole aqui") + '"></label>' +
+        '<div class="modal__actions" style="justify-content:flex-start"><button class="btn btn--ghost">Salvar</button></div><p class="form-msg"></p>' +
+      "</form></div>" +
+
+      '<div class="panel panel--wide"><h3>Passo a passo (uma vez só)</h3><ol class="ig__passos">' +
+        "<li>Em <strong>developers.facebook.com</strong> › seu app › <strong>Instagram</strong> › <em>Configuração da API com login do Instagram</em>, copie o <strong>ID do app do Instagram</strong> e a <strong>chave secreta do app do Instagram</strong> e salve ao lado.</li>" +
+        "<li>Em <em>Configurar webhooks</em>, cadastre a URL de callback e o token de verificação abaixo, clique em Verificar e salvar e assine os campos <strong>messages</strong> e <strong>comments</strong>.</li>" +
+        "<li>Em <em>Configurar o login comercial do Instagram</em> › Configurações de login comercial, cole o <strong>URI de redirecionamento OAuth</strong> abaixo.</li>" +
+        "<li>No app do Instagram (celular): Configurações › Mensagens e respostas › Ferramentas conectadas › ative <strong>Permitir acesso às mensagens</strong>.</li>" +
+        "<li>Clique em <strong>Conectar Instagram</strong> e entre com a @pronto.artes.</li>" +
+      '</ol><dl class="answers">' +
+        row("URL de callback do webhook", st.callback_url) +
+        row("Token de verificação", st.verify_token || "gerado ao salvar o app") +
+        row("URI de redirecionamento OAuth", st.redirect_uri) +
+        row("Campos do webhook", "messages, comments") +
+        row("Permissões", "instagram_business_basic, instagram_business_manage_messages, instagram_business_manage_comments") +
+      '</dl><p class="muted" style="font-size:12.5px;margin:10px 0 0">Enquanto o app estiver em modo de desenvolvimento, só funcionam contas com função no app (adicione a @pronto.artes como testadora do Instagram). Para uso definitivo, envie essas 3 permissões para a análise da Meta (Acesso avançado).</p></div>' +
+      "</div>";
+
+    var form = $("#ig-form-cfg");
+    $$("input[readonly]", form).forEach(function (i) { i.addEventListener("focus", function () { i.removeAttribute("readonly"); }); });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var msgEl = $(".form-msg", form), secret = form.app_secret.value.trim();
+      if (secret && !/^[0-9a-f]{32}$/i.test(secret)) { msgEl.textContent = "A chave secreta tem 32 letras/números (0-9, a-f)."; return; }
+      api("/instagram", { method: "POST", body: { app_id: form.app_id.value, app_secret: secret } })
+        .then(function (r) { toast("Salvo"); renderIgSetup(r); }).catch(function (err) { msgEl.textContent = err.serverMessage || ERR[err.code] || err.code; });
+    });
+    $("#ig-conectar").addEventListener("click", function () {
+      api("/instagram/conectar", { method: "POST", body: {} }).then(function (r) { location.href = r.url; }).catch(fail);
+    });
+    var ab = $("#ig-abrir"); if (ab) ab.addEventListener("click", renderInstagram);
+    var sair = $("#ig-sair");
+    if (sair) sair.addEventListener("click", function () {
+      if (!confirm("Desconectar o Instagram do CRM? As conversas ficam salvas.")) return;
+      api("/instagram/desconectar", { method: "POST", body: {} }).then(function () { toast("Instagram desconectado"); renderInstagram(); }).catch(fail);
     });
   }
 
@@ -1521,6 +1783,7 @@
     $("#me").textContent = "(" + r[1].user.username + ")";
     route();
     updateWaDot();
+    api("/instagram/conversas").then(function (d) { IG.lista = d.conversas; igUpdateCount(); }).catch(function () {});
   }).catch(fail);
 
   // Atualiza a cada 30s para mostrar leads e mensagens novas (sem atrapalhar quem está editando)
@@ -1529,7 +1792,7 @@
     var before = S.leads.length;
     loadLeads().then(function () {
       if (S.leads.length > before) toast((S.leads.length - before) + " novo(s) lead(s)");
-      if (S.view !== "dashboard") render();
+      if (S.view !== "dashboard" && S.view !== "instagram") render();
     }).catch(function () {});
   }, 30000);
 })();
